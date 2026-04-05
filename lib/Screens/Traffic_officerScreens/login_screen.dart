@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../services/auth_service.dart';
-import '../theme/app_theme.dart';
+import '../../services/TrafficOfficerServices/auth_service.dart';
+import '../../theme/app_theme.dart';
 import 'dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
