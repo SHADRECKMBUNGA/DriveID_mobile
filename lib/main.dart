@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:app_links/app_links.dart';
 import 'core/config/supabase_config.dart';
+import 'features/driver/screens/driver_dashboard.dart';
 import 'features/traffic_officer/screens/dashboard_screen.dart';
 import 'features/traffic_officer/screens/login_screen.dart';
 import 'features/traffic_officer/services/auth_service.dart';
@@ -89,8 +90,10 @@ class _MyAppState extends State<MyApp> {
       theme: AppTheme.darkTheme,
       initialRoute: '/',
       routes: {
-        '/': (context) => LoginScreen(),
-        '/login': (context) => DashboardScreen(),
+        '/': (context) => const AuthWrapper(),
+        '/login': (context) => const LoginScreen(),
+        '/traffic-dashboard': (context) => const DashboardScreen(),
+        '/driver-dashboard': (context) => const DriverDashboard(),
       },
     );
   }
@@ -104,7 +107,8 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
-  bool? _isLoggedIn;
+  String? _userRole;
+  bool _isChecking = true;
 
   @override
   void initState() {
@@ -113,17 +117,25 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<void> _checkLoginStatus() async {
-    final isLoggedIn = await AuthService.isLoggedIn();
+    final user = await AuthService.currentUser;
     setState(() {
-      _isLoggedIn = isLoggedIn;
+      _userRole = user?.role;
+      _isChecking = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoggedIn == null) {
+    if (_isChecking) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    return _isLoggedIn! ? DashboardScreen() : LoginScreen();
+
+    if (_userRole == 'driver') {
+      return const DriverDashboard();
+    }
+    if (_userRole == 'traffic_officer') {
+      return const DashboardScreen();
+    }
+    return const LoginScreen();
   }
 }

@@ -11,7 +11,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final bool _isLoading = false;
+  bool _isLoading = false;
   bool _isPasswordLogin = true; // Default to password login for mobile
   
   final TextEditingController _emailController = TextEditingController();
@@ -24,30 +24,12 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // Email/Password Login (Removed for testing)
-  // Future<void> _signInWithPassword() async {
-  //   if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-  //     _showSnackBar('Please enter email and password', AppTheme.warning);
-  //     return;
-  //   }
-
-  //   setState(() => _isLoading = true);
-
-  //   try {
-  //     final user = await AuthService.signInWithEmail(
-  //       email: _emailController.text.trim(),
-  //       password: _passwordController.text,
-  //     );
-
-  //     if (user != null && mounted) {
-  //       _navigateByRole(user);
-  //     }
-  //   } catch (e) {
-  //     _showSnackBar(e.toString(), AppTheme.error);
-  //   } finally {
-  //     if (mounted) setState(() => _isLoading = false);
-  //   }
-  // }
+  Future<void> _signInWithPassword() async {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const DashboardScreen()),
+    );
+  }
 
   // eSignet Login (Removed for testing)
   // Future<void> _signInWithESignet() async {
@@ -67,27 +49,11 @@ class _LoginScreenState extends State<LoginScreen> {
   //   }
   // }
 
-  // void _navigateByRole(AppUser user) {
-  //   if (user.isDriver) {
-  //     Navigator.pushReplacement(
-  //       context,
-  //       MaterialPageRoute(builder: (_) => const DriverDashboard()),
-  //     );
-  //   } else if (user.isTrafficOfficer) {
-  //     Navigator.pushReplacement(
-  //       context,
-  //       MaterialPageRoute(builder: (_) => const DashboardScreen()),
-  //     );
-  //   } else {
-  //     _showSnackBar('Invalid role for mobile app', AppTheme.error);
-  //   }
-  // }
-
-  // void _showSnackBar(String message, Color color) {
-  //   ScaffoldMessenger.of(context).showSnackBar(
-  //     SnackBar(content: Text(message), backgroundColor: color),
-  //   );
-  // }
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: color),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -257,7 +223,7 @@ class _LoginScreenState extends State<LoginScreen> {
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
-            onPressed: _isLoading ? null : () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DashboardScreen())),
+            onPressed: _isLoading ? null : _signInWithPassword,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.gold,
               foregroundColor: Colors.black,
@@ -296,7 +262,12 @@ class _LoginScreenState extends State<LoginScreen> {
       width: double.infinity,
       height: 56,
       child: ElevatedButton(
-        onPressed: _isLoading ? null : () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DashboardScreen())),
+        onPressed: _isLoading
+            ? null
+            : () => _showSnackBar(
+                'eSignet login will be enabled later',
+                AppTheme.warning,
+              ),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppTheme.gold,
           foregroundColor: Colors.black,
