@@ -118,22 +118,31 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<void> _checkLoginStatus() async {
-    final user = await AuthService.currentUser;
-    if (user != null && !user.canAccessMobile) {
+    try {
+      final user = await AuthService.currentUser;
+      if (user != null && !user.canAccessMobile) {
+        await AuthService.logout();
+        if (!mounted) return;
+        setState(() {
+          _user = null;
+          _isChecking = false;
+        });
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _user = user;
+        _isChecking = false;
+      });
+    } catch (_) {
       await AuthService.logout();
       if (!mounted) return;
       setState(() {
         _user = null;
         _isChecking = false;
       });
-      return;
     }
-
-    if (!mounted) return;
-    setState(() {
-      _user = user;
-      _isChecking = false;
-    });
   }
 
   @override
