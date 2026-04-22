@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../../../core/models/app_user.dart';
 import '../../../core/theme/app_theme.dart';
 import '../services/auth_service.dart';
@@ -15,11 +16,22 @@ class CustomAppBar extends StatefulWidget implements PreferredSizeWidget {
 
 class _CustomAppBarState extends State<CustomAppBar> {
   AppUser? _user;
+  StreamSubscription<AppUser?>? _userSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadUser();
+    _userSubscription = AuthService.userStream.listen((user) {
+      if (!mounted) return;
+      setState(() => _user = user);
+    });
+  }
+
+  @override
+  void dispose() {
+    _userSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadUser() async {

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:app_links/app_links.dart';
 import 'core/config/supabase_config.dart';
-import 'features/driver/screens/driver_dashboard.dart';
+import 'features/driver/driver_dashboard.dart';
 import 'features/traffic_officer/screens/dashboard_screen.dart';
 import 'features/traffic_officer/screens/login_screen.dart';
 import 'features/traffic_officer/services/auth_service.dart';

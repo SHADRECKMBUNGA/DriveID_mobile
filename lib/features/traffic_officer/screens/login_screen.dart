@@ -4,7 +4,7 @@ import '../../../core/models/app_user.dart';
 import '../../../core/theme/app_theme.dart';
 import '../services/auth_service.dart';
 import 'dashboard_screen.dart';
-import '../../driver/screens/driver_dashboard.dart';
+import '../../driver/driver_dashboard.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});

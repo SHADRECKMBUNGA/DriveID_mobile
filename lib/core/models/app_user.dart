@@ -26,7 +26,19 @@ class AppUser {
       return userData!['full_name'] ?? userData!['user_name'] ?? email;
     }
     if ((isTrafficOfficer || isLicensingOfficer) && userData != null) {
-      return '${userData!['first_name']} ${userData!['last_name']}';
+      final fullName = userData!['full_name']?.toString().trim();
+      if (fullName != null && fullName.isNotEmpty) {
+        return fullName;
+      }
+
+      final firstName = userData!['first_name']?.toString().trim() ?? '';
+      final lastName = userData!['last_name']?.toString().trim() ?? '';
+      final combined = '$firstName $lastName'.trim();
+      if (combined.isNotEmpty) {
+        return combined;
+      }
+
+      return userData!['email'] ?? email;
     }
     return email;
   }
