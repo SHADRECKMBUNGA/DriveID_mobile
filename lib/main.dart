@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:driveid_app/features/driver/driver_dashboard.dart';
+import 'package:driveid_app/features/driver/my_license_tab.dart';
 import 'package:flutter/material.dart';
 import 'package:app_links/app_links.dart';
 import 'core/config/supabase_config.dart';
@@ -91,7 +91,7 @@ class _MyAppState extends State<MyApp> {
       initialRoute: '/',
       routes: {
         '/': (context) => LoginScreen(),
-        '/login': (context) => DriverDashboard(),
+        '/login': (context) =>  MyLicenseTab(),
       },
     );
   }

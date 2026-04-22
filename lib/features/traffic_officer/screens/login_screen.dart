@@ -1,7 +1,7 @@
-// lib/screens/login_screen.dart
+
+import 'package:driveid_app/features/driver/my_license_tab.dart';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
-import 'dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -157,7 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 if (_isPasswordLogin)
                   _buildPasswordLoginForm()
                 else
-                  _buildESignetLoginButton(),
+                  // _buildESignetLoginButton(),
 
                 const SizedBox(height: 24),
                 
@@ -257,7 +257,7 @@ class _LoginScreenState extends State<LoginScreen> {
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
-            onPressed: _isLoading ? null : () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DashboardScreen())),
+            onPressed: _isLoading ? null : () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const  MyLicenseTab())),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.gold,
               foregroundColor: Colors.black,
@@ -291,40 +291,40 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildESignetLoginButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton(
-        onPressed: _isLoading ? null : () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DashboardScreen())),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppTheme.gold,
-          foregroundColor: Colors.black,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
-        child: _isLoading
-            ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                ),
-              )
-            : const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.security, size: 20, color: Colors.black),
-                  SizedBox(width: 12),
-                  Text(
-                    'Sign in with eSignet',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black),
-                  ),
-                ],
-              ),
-      ),
-    );
-  }
+  // Widget _buildESignetLoginButton() {
+  //   return SizedBox(
+  //     width: double.infinity,
+  //     height: 56,
+  //     child: ElevatedButton(
+  //       onPressed: _isLoading ? null : () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MyLicenseTab())),
+  //       style: ElevatedButton.styleFrom(
+  //         backgroundColor: AppTheme.gold,
+  //         foregroundColor: Colors.black,
+  //         shape: RoundedRectangleBorder(
+  //           borderRadius: BorderRadius.circular(14),
+  //         ),
+  //       ),
+  //       child: _isLoading
+  //           ? const SizedBox(
+  //               width: 24,
+  //               height: 24,
+  //               child: CircularProgressIndicator(
+  //                 strokeWidth: 2,
+  //                 valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+  //               ),
+  //             )
+  //           : const Row(
+  //               mainAxisAlignment: MainAxisAlignment.center,
+  //               children: [
+  //                 Icon(Icons.security, size: 20, color: Colors.black),
+  //                 SizedBox(width: 12),
+  //                 Text(
+  //                   'Sign in with eSignet',
+  //                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black),
+  //                 ),
+  //               ],
+  //             ),
+  //     ),
+  //   );
+  // }
 }
