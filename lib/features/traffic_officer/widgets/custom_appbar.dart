@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import '../../../core/models/app_user.dart';
 import '../../../core/theme/app_theme.dart';
 import '../services/auth_service.dart';
 
@@ -13,14 +15,54 @@ class CustomAppBar extends StatefulWidget implements PreferredSizeWidget {
 }
 
 class _CustomAppBarState extends State<CustomAppBar> {
-  final String _userName = "Peter Mwale";
-  final String _userRole = "Traffic Officer";
+  AppUser? _user;
+  StreamSubscription<AppUser?>? _userSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+    _userSubscription = AuthService.userStream.listen((user) {
+      if (!mounted) return;
+      setState(() => _user = user);
+    });
+  }
+
+  @override
+  void dispose() {
+    _userSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadUser() async {
+    final user = await AuthService.currentUser;
+    if (!mounted) return;
+    setState(() => _user = user);
+  }
 
   void _handleLogout() async {
     await AuthService.logout();
     // Redirect to login
     if (mounted) {
       Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+    }
+  }
+
+  String get _userName => _user?.displayName ?? 'Account';
+
+  String get _userRole {
+    final role = _user?.role;
+    switch (role) {
+      case 'traffic_officer':
+        return 'Traffic Officer';
+      case 'driver':
+        return 'Driver';
+      case 'licensing_officer':
+        return 'Licensing Officer';
+      case 'admin':
+        return 'Admin';
+      default:
+        return 'User';
     }
   }
 
