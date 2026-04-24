@@ -1,13 +1,15 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
+
 import 'package:app_links/app_links.dart';
+import 'package:flutter/material.dart';
+
 import 'core/config/supabase_config.dart';
+import 'core/models/app_user.dart';
+import 'core/theme/app_theme.dart';
 import 'features/driver/driver_dashboard.dart';
 import 'features/traffic_officer/screens/dashboard_screen.dart';
 import 'features/traffic_officer/screens/login_screen.dart';
 import 'features/traffic_officer/services/auth_service.dart';
-import 'core/theme/app_theme.dart';
-import 'core/models/app_user.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,11 +57,8 @@ class _MyAppState extends State<MyApp> {
             final idToken = tokenData['id_token'];
             if (accessToken != null && idToken != null) {
               await AuthService.storeTokens(accessToken, idToken);
-              // Navigate to home
               if (mounted) {
-                Navigator.of(
-                  context,
-                ).pushNamedAndRemoveUntil('/', (_) => false);
+                Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
               }
             } else {
               _showError('Invalid token response');
@@ -136,7 +135,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
         _isChecking = false;
       });
     } catch (_) {
+<<<<<<< Updated upstream
       await AuthService.logout();
+=======
+>>>>>>> Stashed changes
       if (!mounted) return;
       setState(() {
         _user = null;
@@ -150,7 +152,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (_isChecking) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-
     if (_user?.isDriver == true) {
       return const DriverDashboard();
     }
