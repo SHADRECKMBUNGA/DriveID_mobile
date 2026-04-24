@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
@@ -54,7 +55,18 @@ class AuthService {
       await _storeUserInfo(appUser);
       
       return appUser;
+    } on SocketException {
+      throw Exception(
+        'Unable to reach Supabase. Check your internet connection or DNS settings and try again.',
+      );
     } catch (e) {
+      final message = e.toString();
+      if (message.contains('Failed host lookup') ||
+          message.contains('AuthRetryableFetchException')) {
+        throw Exception(
+          'Unable to reach Supabase. Check your internet connection or DNS settings and try again.',
+        );
+      }
       throw Exception('Login failed: ${e.toString()}');
     }
   }
