@@ -1,8 +1,6 @@
 import 'dart:async';
-
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
-
 import 'core/config/supabase_config.dart';
 import 'core/models/app_user.dart';
 import 'core/theme/app_theme.dart';
@@ -93,7 +91,7 @@ class _MyAppState extends State<MyApp> {
         '/': (context) => const AuthWrapper(),
         '/login': (context) => const LoginScreen(),
         '/traffic-dashboard': (context) => const DashboardScreen(),
-        '/driver-dashboard': (context) => const DriverDashboard(),
+        '/driver-dashboard': (context) => DriverDashboard(),
       },
     );
   }
@@ -135,10 +133,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         _isChecking = false;
       });
     } catch (_) {
-<<<<<<< Updated upstream
       await AuthService.logout();
-=======
->>>>>>> Stashed changes
       if (!mounted) return;
       setState(() {
         _user = null;
@@ -153,7 +148,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (_user?.isDriver == true) {
-      return const DriverDashboard();
+      return DriverDashboard();
     }
     if (_user?.isTrafficOfficer == true) {
       return const DashboardScreen();
