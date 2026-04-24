@@ -1,65 +1,95 @@
-// lib/screens/driver_dashboard.dart
-import 'package:driveid_app/core/theme/app_theme.dart';
-import 'package:driveid_app/features/traffic_officer/screens/login_screen.dart';
-import 'package:driveid_app/features/traffic_officer/services/auth_service.dart';
 import 'package:flutter/material.dart';
 
-class DriverDashboard extends StatelessWidget {
+import '../../core/theme/app_theme.dart';
+import 'services/driver_portal_service.dart';
+import 'tabs/overview_tab.dart';
+import 'tabs/license_tab.dart';
+import 'tabs/history_tab.dart';
+import 'widgets/driver_dashboard_shared.dart';
+
+class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
 
-  Future<void> _logout(BuildContext context) async {
-    await AuthService.logout();
-    if (context.mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-      );
+  @override
+  State<DriverDashboard> createState() => _DriverDashboardState();
+}
+
+class _DriverDashboardState extends State<DriverDashboard> {
+  final DriverPortalService _service = DriverPortalService();
+  DriverPortalSnapshot? _snapshot;
+  bool _isLoading = true;
+  final ValueNotifier<String> _qrData = ValueNotifier<String>('');
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSnapshot();
+  }
+
+  @override
+  void dispose() {
+    _qrData.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadSnapshot() async {
+    try {
+      final snapshot = await _service.getSnapshot();
+      setState(() {
+        _snapshot = snapshot;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load data: $e')),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Driver Dashboard'),
-        backgroundColor: AppTheme.cardDark,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => _logout(context),
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_snapshot == null) {
+      return const Scaffold(
+        body: Center(child: Text('Failed to load data')),
+      );
+    }
+
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: AppTheme.background,
+          elevation: 0,
+          title: DriverTopBar(
+            driverName: _snapshot!.user.displayName,
+            onLogout: () async {
+              // TODO: Implement logout
+            },
           ),
-        ],
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Overview'),
+              Tab(text: 'License'),
+              Tab(text: 'History'),
+            ],
+          ),
+        ),
+        body: TabBarView(
           children: [
-            const Icon(
-              Icons.drive_eta,
-              size: 80,
-              color: AppTheme.gold,
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Welcome Driver!',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Your driver portal is under construction',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-            const SizedBox(height: 30),
-            ElevatedButton(
-              onPressed: () => _logout(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.error,
-              ),
-              child: const Text('Logout'),
-            ),
+            OverviewTab(snapshot: _snapshot!),
+            LicenseTab(snapshot: _snapshot!, qrData: _qrData),
+            HistoryTab(snapshot: _snapshot!),
           ],
         ),
       ),
