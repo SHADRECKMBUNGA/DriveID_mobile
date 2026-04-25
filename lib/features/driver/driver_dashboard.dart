@@ -1,13 +1,58 @@
-// lib/screens/driver_dashboard.dart
-import 'package:driveid_app/core/theme/app_theme.dart';
-import 'package:driveid_app/features/traffic_officer/screens/login_screen.dart';
-import 'package:driveid_app/features/traffic_officer/services/auth_service.dart';
+// lib/features/driver/screens/driver_dashboard.dart
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../features/traffic_officer/services/auth_service.dart';
+import '../../../features/traffic_officer/screens/login_screen.dart';
+import 'my_license_tab.dart';
+import 'history_screen.dart';
+import 'settings_tab.dart';
 
-class DriverDashboard extends StatelessWidget {
-  const DriverDashboard({super.key});
+class DriverDashboard extends StatefulWidget {
+  final String? driverId;
+  final String? registerNumber;
+
+  const DriverDashboard({super.key, this.driverId, this.registerNumber});
+
+  @override
+  State<DriverDashboard> createState() => _DriverDashboardState();
+}
+
+class _DriverDashboardState extends State<DriverDashboard> {
+  int _selectedIndex = 0;
+
+  late final List<Widget> _pages;
+
+  @override
+  void initState() {
+    super.initState();
+    _pages = [
+      MyLicenseTab(driverId: widget.driverId, registerNumber: widget.registerNumber),
+      const HistoryScreen(),
+      const SettingsTab(),
+    ];
+  }
 
   Future<void> _logout(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardDark,
+        title: const Text('Log Out', style: TextStyle(color: Colors.white)),
+        content: const Text('Are you sure you want to log out?', style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Log Out', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
     await AuthService.logout();
     if (context.mounted) {
       Navigator.pushReplacement(
@@ -20,48 +65,37 @@ class DriverDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text('Driver Dashboard'),
+        title: Text(
+          _selectedIndex == 0 ? 'My Digital License' : (_selectedIndex == 1 ? 'History' : 'Settings'),
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
+        centerTitle: false,
         backgroundColor: AppTheme.cardDark,
+        elevation: 0,
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
+            icon: const Icon(Icons.logout, color: Colors.redAccent),
             onPressed: () => _logout(context),
+            tooltip: 'Logout',
           ),
         ],
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.drive_eta,
-              size: 80,
-              color: AppTheme.gold,
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Welcome Driver!',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Your driver portal is under construction',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-            const SizedBox(height: 30),
-            ElevatedButton(
-              onPressed: () => _logout(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.error,
-              ),
-              child: const Text('Logout'),
-            ),
-          ],
-        ),
+      body: _pages[_selectedIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: AppTheme.cardDark,
+        selectedItemColor: AppTheme.gold,
+        unselectedItemColor: Colors.white54,
+        currentIndex: _selectedIndex,
+        onTap: (index) => setState(() => _selectedIndex = index),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.credit_card), label: 'My License'),
+          BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
+        ],
       ),
     );
   }

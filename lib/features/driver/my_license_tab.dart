@@ -5,7 +5,7 @@ import '../traffic_officer/services/auth_service.dart';
 import '../traffic_officer/models/driver_license.dart' as local;
 
 class MyLicenseTab extends StatefulWidget {
-  const MyLicenseTab({super.key});
+  const MyLicenseTab({super.key, String? driverId, String? registerNumber});
 
   @override
   State<MyLicenseTab> createState() => _MyLicenseTabState();
