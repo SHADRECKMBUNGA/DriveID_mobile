@@ -1,8 +1,11 @@
+// lib/features/driver/my_license_tab.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import '../traffic_officer/services/auth_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../traffic_officer/models/driver_license.dart' as local;
+// import '../services/activity_service.dart';
+// import '../services/user_session.dart';
 
 class MyLicenseTab extends StatefulWidget {
   const MyLicenseTab({super.key, String? driverId, String? registerNumber});
@@ -15,14 +18,17 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
   late Future<local.DriverLicense> _licenseFuture;
   late Timer _qrRefreshTimer;
   final ValueNotifier<String> _qrData = ValueNotifier<String>('');
+  // bool _isLogged = false;
 
   @override
   void initState() {
     super.initState();
-    _licenseFuture = _fetchLicenseFromAuth();
-    _generateQRData();
+    _licenseFuture = _fetchLicenseForCurrentUser();
     _qrRefreshTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-      _generateQRData();
+      if (_qrData.value.isNotEmpty) {
+        final reg = _qrData.value.split('|')[0];
+        _generateQRData(reg);
+      }
     });
   }
 
@@ -33,23 +39,51 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
     super.dispose();
   }
 
-  Future<local.DriverLicense> _fetchLicenseFromAuth() async {
-    final appUser = await AuthService.currentUser;
-    if (appUser == null) throw Exception('Not logged in');
-    if (appUser.role != 'driver') throw Exception('User is not a driver');
-    if (appUser.license == null) throw Exception('No license found');
-    
-    // Convert the license map to local.DriverLicense
-    final licenseData = appUser.license!;
-    return local.DriverLicense.fromJson(licenseData);
+  Future<local.DriverLicense> _fetchLicenseForCurrentUser() async {
+    final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
+    if (user == null) throw Exception('Not logged in');
+
+    // 1. Get driver using auth_user_id
+    final driverResponse = await supabase
+        .from('drivers')
+        .select('id, full_name, driver_photo_url')
+        .eq('auth_user_id', user.id)
+        .maybeSingle();
+
+    if (driverResponse == null) {
+      throw Exception('No driver profile found for this user.\nPlease contact DVLA.');
+    }
+
+    final driverId = driverResponse['id'];
+    final fullName = driverResponse['full_name'];
+    final photoUrl = driverResponse['driver_photo_url'];
+
+    // 2. Get license using driver_id
+    final licenseResponse = await supabase
+        .from('licenses')
+        .select()
+        .eq('driver_id', driverId)
+        .maybeSingle();
+
+    if (licenseResponse == null) {
+      throw Exception('No license found for this driver.\nPlease contact DVLA.');
+    }
+
+    // 3. Combine and map to model
+    final Map<String, dynamic> combined = {
+      ...licenseResponse,
+      'full_name': fullName,
+      'photo_url': photoUrl,
+      'register_number': licenseResponse['license_number'],
+      'license_type': licenseResponse['license_class'],
+      'status': licenseResponse['license_status'],
+    };
+
+    return local.DriverLicense.fromJson(combined);
   }
 
-  void _generateQRData() {
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    _qrData.value = 'loading|$timestamp';
-  }
-
-  void _updateQRData(String registerNumber) {
+  void _generateQRData(String registerNumber) {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     _qrData.value = '$registerNumber|$timestamp';
   }
@@ -69,10 +103,17 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
               children: [
                 Icon(Icons.error_outline, size: 60, color: Colors.red.shade300),
                 const SizedBox(height: 16),
-                Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.white70)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 40),
+                  child: Text(
+                    snapshot.error.toString(),
+                    style: const TextStyle(color: Colors.white70),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: () => setState(() => _licenseFuture = _fetchLicenseFromAuth()),
+                  onPressed: () => setState(() => _licenseFuture = _fetchLicenseForCurrentUser()),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFFC124),
                     foregroundColor: Colors.black87,
@@ -83,8 +124,20 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
             ),
           );
         }
+
         final license = snapshot.data!;
-        _updateQRData(license.registerNumber);
+
+        // if (!_isLogged) {
+        //   _isLogged = true;
+        //   UserSession().setUser(license.driverId, reg: license.registerNumber);
+        //   ActivityService().logActivity(
+        //     userId: license.driverId,
+        //     action: 'view_license',
+        //     details: 'Viewed digital license',
+        //   );
+        //   _generateQRData(license.registerNumber);
+        // }
+
         return SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -102,6 +155,9 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
     );
   }
 
+  // -------------------------------------------------------------------
+  // License card UI (matches your gold header design)
+  // -------------------------------------------------------------------
   Widget _buildLicenseCard(local.DriverLicense license) {
     return Container(
       decoration: BoxDecoration(
@@ -166,7 +222,7 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Driver photo and name
+                  // Photo and name
                   Row(
                     children: [
                       ClipOval(
@@ -204,7 +260,6 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
                   const SizedBox(height: 20),
                   const Divider(color: Colors.white24, thickness: 1),
                   const SizedBox(height: 20),
-                  // License details
                   Row(
                     children: [
                       Expanded(child: _infoColumn(Icons.category, 'CATEGORY', license.licenseType)),
@@ -224,7 +279,7 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
                   const SizedBox(height: 20),
                   const Divider(color: Colors.white24, thickness: 1),
                   const SizedBox(height: 24),
-                  // Dynamic QR Code
+                  // QR Code
                   Center(
                     child: Column(
                       children: [
@@ -243,8 +298,7 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
                                 version: QrVersions.auto,
                                 size: 160,
                                 gapless: false,
-                                errorStateBuilder: (ctx, err) =>
-                                    const Icon(Icons.error, size: 50, color: Colors.red),
+                                errorStateBuilder: (ctx, err) => const Icon(Icons.error, size: 50, color: Colors.red),
                               ),
                             );
                           },
@@ -309,7 +363,7 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
   Widget _statusChip(String status) {
     final lower = status.toLowerCase();
     Color bgColor, textColor;
-    if (lower == 'active') {
+    if (lower == 'valid' || lower == 'active') {
       bgColor = Colors.green.shade700;
       textColor = Colors.white;
     } else if (lower == 'expired') {
@@ -321,8 +375,14 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(20)),
-      child: Text(status.toUpperCase(), style: TextStyle(color: textColor, fontSize: 10, fontWeight: FontWeight.bold)),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        status.toUpperCase(),
+        style: TextStyle(color: textColor, fontSize: 10, fontWeight: FontWeight.bold),
+      ),
     );
   }
 
