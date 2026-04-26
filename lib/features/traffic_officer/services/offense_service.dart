@@ -11,13 +11,13 @@ class OffenseService {
   static const Duration _requestTimeout = Duration(seconds: 4);
   static const List<String> _identifierColumns = [
     'license_number',
-    'register_number',
     'registration_number',
+    'register_number',
   ];
 
   bool _isMissingColumnError(Object error, String expectedColumn) {
     return error is PostgrestException &&
-        error.code == '42703' &&
+        (error.code == '42703' || error.code == 'PGRST204') &&
         error.message.contains(expectedColumn);
   }
 

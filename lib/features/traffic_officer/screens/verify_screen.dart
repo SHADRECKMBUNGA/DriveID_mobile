@@ -1,3 +1,5 @@
+import 'dart:developer' show log;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -48,6 +50,7 @@ class _VerifyScreenState extends State<VerifyScreen>
   final OffenseService _offenseService = OffenseService();
   final TextEditingController _manualController = TextEditingController();
 
+  // Used for UI hints only now
   String get _licensePrefix => 'DLV${DateTime.now().year}';
 
   @override
@@ -436,7 +439,7 @@ class _VerifyScreenState extends State<VerifyScreen>
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        "Format: DLV${DateTime.now().year} plus 5 digits (e.g., DLV${DateTime.now().year}70394)",
+                        "Format: DLV plus 4-digit year and 5 digits (e.g., DLV${DateTime.now().year}70394)",
                         style: TextStyle(
                           fontSize: 11,
                           color: AppTheme.textLight,
@@ -657,9 +660,9 @@ class _VerifyScreenState extends State<VerifyScreen>
     }
     if (!_isValidRegistrationNumber(regNumber)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
-            'Invalid format. Use $_licensePrefix followed by 5 digits.',
+            'Invalid format. Use DLV followed by a 4-digit year and 5 digits.',
           ),
         ),
       );
@@ -699,14 +702,21 @@ class _VerifyScreenState extends State<VerifyScreen>
   }
 
   Future<void> _verifyLicense(String licenseNumber, {LicenseQrPayload? qrPayload}) async {
+    log('Verifying license: $licenseNumber');
     try {
       final success = await _dashboardService.verifyAndRecordLicense(
         licenseNumber,
       );
+      log('License validation result: $success');
+
       final license = await _dashboardService.getLicenseDetails(licenseNumber);
+      log('License details retrieved: ${license != null ? 'YES' : 'NO'}');
+
       final offenses = await _offenseService.getOffensesByLicenseNumber(
         licenseNumber,
       );
+      log('Offenses retrieved: ${offenses.length}');
+
       if (!mounted) return;
       
       if (success && license != null) {
@@ -765,9 +775,11 @@ class _VerifyScreenState extends State<VerifyScreen>
   }
 
   Future<void> _verifyScannedQr(String rawCode) async {
+    log('Processing QR code: $rawCode');
     final parsed = LicenseQrPayload.parse(rawCode);
 
     if (!parsed.isValid) {
+      log('QR parse failed: ${parsed.error}');
       if (!mounted) return;
       _playErrorSound();
       setState(() {
@@ -778,7 +790,10 @@ class _VerifyScreenState extends State<VerifyScreen>
       return;
     }
 
+    log('QR parsed successfully. Register number: ${parsed.payload?.registerNumber}');
+
     if (parsed.isStructured && !parsed.payload!.isFresh) {
+      log('QR code expired');
       if (!mounted) return;
       _playErrorSound();
       setState(() {
@@ -794,7 +809,8 @@ class _VerifyScreenState extends State<VerifyScreen>
   }
 
   bool _isValidRegistrationNumber(String value) {
-    final pattern = RegExp('^${RegExp.escape(_licensePrefix)}\\d{5}\$');
+    // Matches DLV followed by a 4-digit year and 5-digit sequence (9 digits total)
+    final pattern = RegExp(r'^DLV\d{9}$');
     return pattern.hasMatch(value);
   }
 }

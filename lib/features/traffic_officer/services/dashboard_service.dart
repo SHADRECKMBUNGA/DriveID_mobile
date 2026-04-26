@@ -9,9 +9,14 @@ class DashboardService {
   final SupabaseClient _client = SupabaseConfig.client;
   static const Duration _requestTimeout = Duration(seconds: 4);
   static const List<String> _licenseIdentifierColumns = [
+    'license_number',
+    'register_number',
+    'registration_number',
+  ];
+  static const List<String> _verificationIdentifierColumns = [
+    'license_number',
     'registration_number',
     'register_number',
-    'license_number',
   ];
 
   Future<Map<String, String>> _getDriverNamesById(
@@ -54,8 +59,10 @@ class DashboardService {
   }
 
   Future<Map<String, dynamic>?> _getLicenseRow(String licenseNumber) async {
+    log('Searching for license: $licenseNumber');
     for (final column in _licenseIdentifierColumns) {
       try {
+        log('Trying column: $column');
         final response = await _client
             .from('licenses')
             .select()
@@ -64,16 +71,20 @@ class DashboardService {
             .timeout(_requestTimeout);
 
         if (response != null) {
+          log('Found license using column $column: ${response['id']}');
           return Map<String, dynamic>.from(response);
+        } else {
+          log('No result for column $column');
         }
       } catch (error) {
+        log('Error with column $column: $error');
         if (_isMissingColumnError(error, column)) {
           continue;
         }
         rethrow;
       }
     }
-
+    log('License not found: $licenseNumber');
     return null;
   }
 
@@ -169,7 +180,7 @@ class DashboardService {
     required String licenseNumber,
     DateTime? verifiedAfter,
   }) async {
-    for (final column in _licenseIdentifierColumns) {
+    for (final column in _verificationIdentifierColumns) {
       try {
         var query = _client.from('verifications').select().eq(column, licenseNumber);
         if (verifiedAfter != null) {
@@ -239,6 +250,11 @@ class DashboardService {
           .select()
           .timeout(_requestTimeout, onTimeout: () => []);
       final licenses = (response as List<dynamic>?) ?? [];
+      log('Found ${licenses.length} licenses in database');
+      for (var i = 0; i < licenses.length; i++) {
+        final license = licenses[i] as Map<String, dynamic>;
+        log('License ${i+1}: ID=${license['id']}, register_number=${license['register_number']}, status=${license['status']}');
+      }
       final driverNames = await _getDriverNamesById(
         licenses.map((license) => license['driver_id']),
       );
@@ -249,6 +265,7 @@ class DashboardService {
         return License.fromJson(enriched);
       }).toList();
     } catch (e) {
+      log('Error fetching all licenses: $e');
       throw Exception('Failed to fetch licenses: $e');
     }
   }
