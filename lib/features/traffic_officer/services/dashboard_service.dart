@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/license.dart';
 import '../../../core/config/supabase_config.dart';
@@ -262,7 +264,7 @@ class DashboardService {
       } catch (e) {
         // We log it but don't fail the verification process if recording fails
         // due to missing license rows (foreign key constraint)
-        print('Could not record verification: $e');
+        log('Could not record verification: $e');
       }
 
       return isValid;
