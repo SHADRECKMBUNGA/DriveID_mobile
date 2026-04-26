@@ -9,9 +9,14 @@ import 'features/traffic_officer/screens/dashboard_screen.dart';
 import 'features/traffic_officer/screens/login_screen.dart';
 import 'features/traffic_officer/services/auth_service.dart';
 
+import 'core/services/local_database_service.dart';
+import 'features/traffic_officer/services/sync_service.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await LocalDatabaseService.initialize();
   await SupabaseConfig.initialize();
+  await SyncService().initialize();
   runApp(const MyApp());
 }
 
@@ -132,7 +137,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
         _isChecking = false;
       });
     } catch (_) {
-      await AuthService.logout();
+      try {
+        await AuthService.logout();
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _user = null;

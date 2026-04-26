@@ -64,16 +64,10 @@ class _OffenseFormState extends State<OffenseForm> {
       return;
     }
 
-    if (_locationController.text.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Please enter a location')));
-      return;
-    }
-
     setState(() => _isSubmitting = true);
 
     final fine = widget.offenseFines[_offenseTypeController.text] ?? 'TBD';
+    
     final formData = OffenseFormData(
       offenseType: _offenseTypeController.text,
       fine: fine,

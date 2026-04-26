@@ -1,4 +1,8 @@
+import 'dart:developer' show log;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../core/utils/license_qr.dart';
 import '../../../core/theme/app_theme.dart';
@@ -46,6 +50,7 @@ class _VerifyScreenState extends State<VerifyScreen>
   final OffenseService _offenseService = OffenseService();
   final TextEditingController _manualController = TextEditingController();
 
+  // Used for UI hints only now
   String get _licensePrefix => 'DLV${DateTime.now().year}';
 
   @override
@@ -434,7 +439,7 @@ class _VerifyScreenState extends State<VerifyScreen>
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        "Format: DLV${DateTime.now().year} plus 5 digits (e.g., DLV${DateTime.now().year}70394)",
+                        "Format: DLV plus 4-digit year and 5 digits (e.g., DLV${DateTime.now().year}70394)",
                         style: TextStyle(
                           fontSize: 11,
                           color: AppTheme.textLight,
@@ -527,10 +532,32 @@ class _VerifyScreenState extends State<VerifyScreen>
     return Stack(
       children: [
         SingleChildScrollView(
-          child: VerificationResultCard(
-            license: _verificationLicense!,
-            offenses: _verificationOffenses,
-            onRecordOffense: () => setState(() => _showOffenseForm = true),
+          child: Column(
+            children: [
+              VerificationResultCard(
+                license: _verificationLicense!,
+                offenses: _verificationOffenses,
+                onRecordOffense: () => setState(() => _showOffenseForm = true),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _resetVerification,
+                  icon: const Icon(Icons.qr_code_scanner),
+                  label: const Text("Scan Another", style: TextStyle(fontSize: 15)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    foregroundColor: AppTheme.gold,
+                    side: const BorderSide(color: AppTheme.gold),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 40),
+            ],
           ),
         ),
         if (_showOffenseForm)
@@ -633,9 +660,9 @@ class _VerifyScreenState extends State<VerifyScreen>
     }
     if (!_isValidRegistrationNumber(regNumber)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
-            'Invalid format. Use $_licensePrefix followed by 5 digits.',
+            'Invalid format. Use DLV followed by a 4-digit year and 5 digits.',
           ),
         ),
       );
@@ -650,17 +677,68 @@ class _VerifyScreenState extends State<VerifyScreen>
     }
   }
 
-  Future<void> _verifyLicense(String licenseNumber) async {
+  Future<void> _playSuccessSound() async {
+    try {
+      await HapticFeedback.lightImpact();
+      final player = AudioPlayer();
+      await player.play(AssetSource('sounds/success_beep.mp3'));
+      player.onPlayerComplete.listen((_) => player.dispose());
+    } catch (e) {
+      debugPrint('Error playing sound: $e');
+    }
+  }
+
+  Future<void> _playErrorSound() async {
+    try {
+      await HapticFeedback.vibrate();
+      await Future.delayed(const Duration(milliseconds: 100));
+      await HapticFeedback.heavyImpact();
+      final player = AudioPlayer();
+      await player.play(AssetSource('sounds/error_buzzer.mp3'));
+      player.onPlayerComplete.listen((_) => player.dispose());
+    } catch (e) {
+      debugPrint('Error playing sound: $e');
+    }
+  }
+
+  Future<void> _verifyLicense(String licenseNumber, {LicenseQrPayload? qrPayload}) async {
+    log('Verifying license: $licenseNumber');
     try {
       final success = await _dashboardService.verifyAndRecordLicense(
         licenseNumber,
       );
+      log('License validation result: $success');
+
       final license = await _dashboardService.getLicenseDetails(licenseNumber);
+      log('License details retrieved: ${license != null ? 'YES' : 'NO'}');
+
       final offenses = await _offenseService.getOffensesByLicenseNumber(
         licenseNumber,
       );
+      log('Offenses retrieved: ${offenses.length}');
+
       if (!mounted) return;
+      
       if (success && license != null) {
+        if (qrPayload != null) {
+          final matchesLiveRecord =
+              license.id == qrPayload.licenseId &&
+              license.registerNumber == qrPayload.registerNumber;
+
+          if (!matchesLiveRecord) {
+            _playErrorSound();
+            setState(() {
+              _verificationStatus = VerificationStatus.error;
+              _verificationMessage =
+                  'QR details do not match the current Supabase license record.';
+              _verificationLicense = null;
+              _verificationOffenses = [];
+            });
+            return;
+          }
+        }
+
+        _playSuccessSound();
         setState(() {
           _verificationStatus = VerificationStatus.success;
           _verificationMessage = 'License verified and recorded';
@@ -668,6 +746,7 @@ class _VerifyScreenState extends State<VerifyScreen>
           _verificationOffenses = offenses;
         });
       } else if (license != null) {
+        _playErrorSound();
         setState(() {
           _verificationStatus = VerificationStatus.inactive;
           _verificationMessage = 'License is inactive or expired';
@@ -675,6 +754,7 @@ class _VerifyScreenState extends State<VerifyScreen>
           _verificationOffenses = offenses;
         });
       } else {
+        _playErrorSound();
         setState(() {
           _verificationStatus = VerificationStatus.notFound;
           _verificationMessage = 'License not found in the system';
@@ -684,6 +764,7 @@ class _VerifyScreenState extends State<VerifyScreen>
       }
     } catch (e) {
       if (!mounted) return;
+      _playErrorSound();
       setState(() {
         _verificationStatus = VerificationStatus.error;
         _verificationMessage = 'Verification error: $e';
@@ -694,10 +775,13 @@ class _VerifyScreenState extends State<VerifyScreen>
   }
 
   Future<void> _verifyScannedQr(String rawCode) async {
+    log('Processing QR code: $rawCode');
     final parsed = LicenseQrPayload.parse(rawCode);
 
     if (!parsed.isValid) {
+      log('QR parse failed: ${parsed.error}');
       if (!mounted) return;
+      _playErrorSound();
       setState(() {
         _verificationStatus = VerificationStatus.error;
         _verificationMessage = parsed.error ?? 'Invalid QR code';
@@ -706,8 +790,12 @@ class _VerifyScreenState extends State<VerifyScreen>
       return;
     }
 
+    log('QR parsed successfully. Register number: ${parsed.payload?.registerNumber}');
+
     if (parsed.isStructured && !parsed.payload!.isFresh) {
+      log('QR code expired');
       if (!mounted) return;
+      _playErrorSound();
       setState(() {
         _verificationStatus = VerificationStatus.error;
         _verificationMessage =
@@ -717,31 +805,12 @@ class _VerifyScreenState extends State<VerifyScreen>
       return;
     }
 
-    await _verifyLicense(parsed.registerNumber);
-
-    if (!mounted || _verificationLicense == null || !parsed.isStructured) {
-      return;
-    }
-
-    final payload = parsed.payload!;
-    final license = _verificationLicense!;
-    final matchesLiveRecord =
-        license.id == payload.licenseId &&
-        license.registerNumber == payload.registerNumber;
-
-    if (!matchesLiveRecord) {
-      setState(() {
-        _verificationStatus = VerificationStatus.error;
-        _verificationMessage =
-            'QR details do not match the current Supabase license record.';
-        _verificationLicense = null;
-        _verificationOffenses = [];
-      });
-    }
+    await _verifyLicense(parsed.registerNumber, qrPayload: parsed.isStructured ? parsed.payload : null);
   }
 
   bool _isValidRegistrationNumber(String value) {
-    final pattern = RegExp('^${RegExp.escape(_licensePrefix)}\\d{5}\$');
+    // Matches DLV followed by a 4-digit year and 5-digit sequence (9 digits total)
+    final pattern = RegExp(r'^DLV\d{9}$');
     return pattern.hasMatch(value);
   }
 }

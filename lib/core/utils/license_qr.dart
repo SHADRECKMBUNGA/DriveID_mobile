@@ -100,8 +100,8 @@ class LicenseQrPayload {
 
   static bool _isLegacyRegisterNumber(String value) {
     final normalized = value.trim().toUpperCase();
-    final prefix = 'DLV${DateTime.now().year}';
-    final pattern = RegExp('^${RegExp.escape(prefix)}\\d{5}\$');
+    // Matches DLV followed by a 4-digit year and 5-digit sequence (9 digits total)
+    final pattern = RegExp(r'^DLV\d{9}$');
     return pattern.hasMatch(normalized);
   }
 }
