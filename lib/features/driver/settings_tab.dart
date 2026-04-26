@@ -6,7 +6,7 @@ import 'profile_screen.dart';
 import 'change_password_screen.dart';
 
 class SettingsTab extends StatefulWidget {
-  const SettingsTab({super.key});
+  const SettingsTab({super.key, ValueChanged<Locale>? onLocaleChanged});
 
   @override
   State<SettingsTab> createState() => _SettingsTabState();

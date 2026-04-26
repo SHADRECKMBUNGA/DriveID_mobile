@@ -1,7 +1,7 @@
-// lib/screens/change_password_screen.dart
+import 'package:driveid_app/features/driver/services/activity_service.dart';
+import 'package:driveid_app/features/driver/services/user_session.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
 
@@ -31,18 +31,33 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
-    try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) throw Exception('Not logged in');
+    final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
+    if (user == null) {
+      _showError('Not logged in');
+      setState(() => _isLoading = false);
+      return;
+    }
 
-      final response = await Supabase.instance.client.auth.signInWithPassword(
+    try {
+      // Re-authenticate
+      final response = await supabase.auth.signInWithPassword(
         email: user.email!,
         password: _currentPasswordController.text.trim(),
       );
       if (response.user == null) throw Exception('Current password is incorrect');
 
-      await Supabase.instance.client.auth.updateUser(
+      // Update password
+      await supabase.auth.updateUser(
         UserAttributes(password: _newPasswordController.text.trim()),
+      );
+
+      // Log activity
+      final userId = UserSession().userId ?? user.id;
+      await ActivityService().logActivity(
+        userId: userId,
+        action: 'change_password',
+        details: 'Password changed successfully',
       );
 
       if (mounted) {
@@ -52,12 +67,16 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         Navigator.pop(context);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-      );
+      _showError(e.toString());
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error: $message'), backgroundColor: Colors.red),
+    );
   }
 
   @override

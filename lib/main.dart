@@ -75,9 +75,7 @@ class _MyAppState extends State<MyApp> {
 
   void _showError(String message) {
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -85,6 +83,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      title: 'DriveID',
       theme: AppTheme.darkTheme,
       initialRoute: '/',
       routes: {
@@ -148,7 +147,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (_user?.isDriver == true) {
-      return DriverDashboard();
+      return const DriverDashboard();
     }
     if (_user?.isTrafficOfficer == true) {
       return const DashboardScreen();

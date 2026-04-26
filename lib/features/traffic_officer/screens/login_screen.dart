@@ -79,7 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void _navigateForRole(AppUser user) {
     final Widget destination;
     if (user.isDriver) {
-      destination = DriverDashboard();
+      destination = DriverDashboard(onLocaleChanged: (Locale locale) {  },);
     } else if (user.isTrafficOfficer) {
       destination = const DashboardScreen();
     } else {

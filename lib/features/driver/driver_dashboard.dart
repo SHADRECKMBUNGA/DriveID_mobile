@@ -1,4 +1,6 @@
 // lib/features/driver/screens/driver_dashboard.dart
+import 'package:driveid_app/features/driver/services/activity_service.dart';
+import 'package:driveid_app/features/driver/services/user_session.dart';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../features/traffic_officer/services/auth_service.dart';
@@ -10,8 +12,9 @@ import 'settings_tab.dart';
 class DriverDashboard extends StatefulWidget {
   final String? driverId;
   final String? registerNumber;
+  final ValueChanged<Locale>? onLocaleChanged;
 
-  const DriverDashboard({super.key, this.driverId, this.registerNumber});
+  const DriverDashboard({super.key, this.driverId, this.registerNumber, this.onLocaleChanged});
 
   @override
   State<DriverDashboard> createState() => _DriverDashboardState();
@@ -28,7 +31,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     _pages = [
       MyLicenseTab(driverId: widget.driverId, registerNumber: widget.registerNumber),
       const HistoryScreen(),
-      const SettingsTab(),
+      SettingsTab(onLocaleChanged: widget.onLocaleChanged),
     ];
   }
 
@@ -52,7 +55,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
       ),
     );
     if (confirm != true) return;
-
+final userId = UserSession().userId;
+if (userId != null) {
+  await ActivityService().logActivity(
+    userId: userId,
+    action: 'logout',
+    details: 'User logged out',
+  );
+}
+UserSession().clear();
     await AuthService.logout();
     if (context.mounted) {
       Navigator.pushReplacement(
@@ -69,6 +80,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       appBar: AppBar(
         title: Text(
           _selectedIndex == 0 ? 'My Digital License' : (_selectedIndex == 1 ? 'History' : 'Settings'),
+            
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
         centerTitle: false,

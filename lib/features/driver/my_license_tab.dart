@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../traffic_officer/models/driver_license.dart' as local;
-// import '../services/activity_service.dart';
-// import '../services/user_session.dart';
+import '../driver/services/activity_service.dart';
+import '../driver/services/user_session.dart';
 
 class DriverFullProfile {
   final local.DriverLicense license;
@@ -103,6 +103,22 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
     };
 
     final license = local.DriverLicense.fromJson(combined);
+    
+    // Log activity only once
+    if (!_isLogged) {
+      _isLogged = true;
+      final userId = license.driverId ?? user.id;
+      UserSession().setUser(userId, reg: license.registerNumber);
+      // Use unawaited to avoid slowing down the future
+      unawaited(
+        ActivityService().logActivity(
+          userId: userId,
+          action: 'view_license',
+          details: 'Viewed digital license',
+        )
+      );
+      _generateQRData(license.registerNumber);
+    }
 
     return DriverFullProfile(
       license: license,
@@ -142,7 +158,9 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: () => setState(() => _profileFuture = _fetchFullProfile()),
+                  onPressed: () => setState(() {
+                    _profileFuture = _fetchFullProfile();
+                  }),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFFC124),
                     foregroundColor: Colors.black87,
@@ -155,23 +173,11 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
         }
 
         final profile = snapshot.data!;
-        final license = profile.license;
-
-        // if (!_isLogged) {
-        //   _isLogged = true;
-        //   UserSession().setUser(license.driverId ?? '', reg: license.registerNumber);
-        //   ActivityService().logActivity(
-        //     userId: license.driverId ?? '',
-        //     action: 'view_license',
-        //     details: 'Viewed digital license',
-        //   );
-        //   _generateQRData(license.registerNumber);
-        // }
-
         return SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
+              
               _buildLicenseCard(profile),
             ],
           ),
@@ -182,7 +188,6 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
 
   Widget _buildLicenseCard(DriverFullProfile profile) {
     final license = profile.license;
-
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF1C1C24),
@@ -203,37 +208,19 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
                 children: [
                   Row(
                     children: [
-                      const Text(
-                        '🇲🇼',
-                        style: TextStyle(fontSize: 32),
-                      ),
+                      const Text('🇲🇼', style: TextStyle(fontSize: 32)),
                       const SizedBox(width: 12),
                       const Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'REPUBLIC OF MALAWI',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.black54,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
+                          Text('REPUBLIC OF MALAWI', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.black54, letterSpacing: 0.8)),
                           SizedBox(height: 2),
-                          Text(
-                            'Digital Driving License',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
-                          ),
+                          Text('Digital Driving License', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
                         ],
                       ),
                     ],
                   ),
-                  Positioned(
-                    top: 0,
-                    right: 0,
-                    child: _statusChip(license.status),
-                  ),
+                  Positioned(top: 0, right: 0, child: _statusChip(license.status)),
                 ],
               ),
             ),
@@ -242,19 +229,12 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Row: Square photo + name & register number
                   Row(
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(12),
                         child: license.photoUrl != null && license.photoUrl!.isNotEmpty
-                            ? Image.network(
-                                license.photoUrl!,
-                                width: 100,
-                                height: 100,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => _defaultAvatar(),
-                              )
+                            ? Image.network(license.photoUrl!, width: 100, height: 100, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _defaultAvatar())
                             : _defaultAvatar(),
                       ),
                       const SizedBox(width: 16),
@@ -262,17 +242,9 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              license.ownerName,
-                              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            Text(license.ownerName, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 4),
-                            Text(
-                              'Reg: ${license.registerNumber}',
-                              style: const TextStyle(color: Colors.white70, fontSize: 13),
-                            ),
+                            Text('Reg: ${license.registerNumber}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                           ],
                         ),
                       ),
@@ -281,7 +253,6 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
                   const SizedBox(height: 20),
                   const Divider(color: Colors.white24, thickness: 1),
                   const SizedBox(height: 20),
-                  // First row: License details
                   Row(
                     children: [
                       Expanded(child: _infoColumn(Icons.category, 'CATEGORY', license.licenseType)),
@@ -291,15 +262,12 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
                           Icons.event_busy,
                           'EXPIRES',
                           _formatDate(license.expiryDate),
-                          valueColor: (license.expiryDate != null && license.expiryDate!.isBefore(DateTime.now()))
-                              ? Colors.redAccent
-                              : null,
+                          valueColor: (license.expiryDate != null && license.expiryDate!.isBefore(DateTime.now())) ? Colors.redAccent : null,
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  // Second row: Citizen details
                   Row(
                     children: [
                       Expanded(child: _infoColumn(Icons.person, 'SEX', profile.sex)),
@@ -310,7 +278,6 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
                   const SizedBox(height: 20),
                   const Divider(color: Colors.white24, thickness: 1),
                   const SizedBox(height: 24),
-                  // Centered QR Code
                   Center(
                     child: Column(
                       children: [
@@ -324,18 +291,13 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
                                 borderRadius: BorderRadius.circular(20),
                                 boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 12)],
                               ),
-                              child: QrImageView(
-                                data: data,
-                                version: QrVersions.auto,
-                                size: 160,
-                                gapless: false,
-                                errorStateBuilder: (ctx, err) => const Icon(Icons.error, size: 50, color: Colors.red),
-                              ),
+                              child: QrImageView(data: data, version: QrVersions.auto, size: 160, gapless: false,
+                                errorStateBuilder: (ctx, err) => const Icon(Icons.error, size: 50, color: Colors.red)),
                             );
                           },
                         ),
                         const SizedBox(height: 12),
-                        
+                    
                       ],
                     ),
                   ),
@@ -348,7 +310,6 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
     );
   }
 
-  // FIXED _infoColumn – prevents overflow by making the label text flexible
   Widget _infoColumn(IconData icon, String label, String value, {Color? valueColor}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -358,20 +319,12 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
             Icon(icon, size: 14, color: const Color(0xFFFFC124)),
             const SizedBox(width: 4),
             Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white54, letterSpacing: 0.5),
-                overflow: TextOverflow.ellipsis,
-              ),
+              child: Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white54, letterSpacing: 0.5), overflow: TextOverflow.ellipsis),
             ),
           ],
         ),
         const SizedBox(height: 6),
-        Text(
-          value,
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: valueColor ?? Colors.white),
-          overflow: TextOverflow.ellipsis,
-        ),
+        Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: valueColor ?? Colors.white), overflow: TextOverflow.ellipsis),
       ],
     );
   }
@@ -380,10 +333,7 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
     return Container(
       width: 60,
       height: 60,
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
       child: const Icon(Icons.person, size: 36, color: Colors.white54),
     );
   }
@@ -403,14 +353,8 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        status.toUpperCase(),
-        style: TextStyle(color: textColor, fontSize: 10, fontWeight: FontWeight.bold),
-      ),
+      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(20)),
+      child: Text(status.toUpperCase(), style: TextStyle(color: textColor, fontSize: 10, fontWeight: FontWeight.bold)),
     );
   }
 
