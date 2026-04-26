@@ -18,7 +18,7 @@ class OffenseService {
   bool _isMissingColumnError(Object error, String expectedColumn) {
     return error is PostgrestException &&
         (error.code == '42703' || error.code == 'PGRST204') &&
-        error.message.contains(expectedColumn);
+        error.message.toLowerCase().contains(expectedColumn.toLowerCase());
   }
 
   String _mapIdentifierKey(Map<String, dynamic> payload) {
@@ -60,13 +60,15 @@ class OffenseService {
               .timeout(_requestTimeout);
           return Map<String, dynamic>.from(response);
         } catch (error) {
-          if (error is! PostgrestException || error.code != '42703') {
+          if (error is! PostgrestException ||
+              (error.code != '42703' && error.code != 'PGRST204')) {
             rethrow;
           }
 
           const removableColumns = ['fine', 'status', 'location', 'name'];
           final missingColumn = removableColumns.cast<String?>().firstWhere(
-            (column) => column != null && error.message.contains(column),
+            (column) => column != null &&
+                error.message.toLowerCase().contains(column.toLowerCase()),
             orElse: () => null,
           );
 
@@ -76,7 +78,7 @@ class OffenseService {
           }
 
           final identifierKey = _mapIdentifierKey(current);
-          if (error.message.contains(identifierKey)) {
+          if (error.message.toLowerCase().contains(identifierKey.toLowerCase())) {
             break;
           }
 
