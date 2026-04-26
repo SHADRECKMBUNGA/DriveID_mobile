@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../core/utils/license_qr.dart';
 import '../../../core/theme/app_theme.dart';
@@ -650,7 +652,31 @@ class _VerifyScreenState extends State<VerifyScreen>
     }
   }
 
-  Future<void> _verifyLicense(String licenseNumber) async {
+  Future<void> _playSuccessSound() async {
+    try {
+      await HapticFeedback.lightImpact();
+      final player = AudioPlayer();
+      await player.play(AssetSource('sounds/success_beep.mp3'));
+      player.onPlayerComplete.listen((_) => player.dispose());
+    } catch (e) {
+      debugPrint('Error playing sound: $e');
+    }
+  }
+
+  Future<void> _playErrorSound() async {
+    try {
+      await HapticFeedback.vibrate();
+      await Future.delayed(const Duration(milliseconds: 100));
+      await HapticFeedback.heavyImpact();
+      final player = AudioPlayer();
+      await player.play(AssetSource('sounds/error_buzzer.mp3'));
+      player.onPlayerComplete.listen((_) => player.dispose());
+    } catch (e) {
+      debugPrint('Error playing sound: $e');
+    }
+  }
+
+  Future<void> _verifyLicense(String licenseNumber, {LicenseQrPayload? qrPayload}) async {
     try {
       final success = await _dashboardService.verifyAndRecordLicense(
         licenseNumber,
@@ -660,7 +686,27 @@ class _VerifyScreenState extends State<VerifyScreen>
         licenseNumber,
       );
       if (!mounted) return;
+      
       if (success && license != null) {
+        if (qrPayload != null) {
+          final matchesLiveRecord =
+              license.id == qrPayload.licenseId &&
+              license.registerNumber == qrPayload.registerNumber;
+
+          if (!matchesLiveRecord) {
+            _playErrorSound();
+            setState(() {
+              _verificationStatus = VerificationStatus.error;
+              _verificationMessage =
+                  'QR details do not match the current Supabase license record.';
+              _verificationLicense = null;
+              _verificationOffenses = [];
+            });
+            return;
+          }
+        }
+
+        _playSuccessSound();
         setState(() {
           _verificationStatus = VerificationStatus.success;
           _verificationMessage = 'License verified and recorded';
@@ -668,6 +714,7 @@ class _VerifyScreenState extends State<VerifyScreen>
           _verificationOffenses = offenses;
         });
       } else if (license != null) {
+        _playErrorSound();
         setState(() {
           _verificationStatus = VerificationStatus.inactive;
           _verificationMessage = 'License is inactive or expired';
@@ -675,6 +722,7 @@ class _VerifyScreenState extends State<VerifyScreen>
           _verificationOffenses = offenses;
         });
       } else {
+        _playErrorSound();
         setState(() {
           _verificationStatus = VerificationStatus.notFound;
           _verificationMessage = 'License not found in the system';
@@ -684,6 +732,7 @@ class _VerifyScreenState extends State<VerifyScreen>
       }
     } catch (e) {
       if (!mounted) return;
+      _playErrorSound();
       setState(() {
         _verificationStatus = VerificationStatus.error;
         _verificationMessage = 'Verification error: $e';
@@ -698,6 +747,7 @@ class _VerifyScreenState extends State<VerifyScreen>
 
     if (!parsed.isValid) {
       if (!mounted) return;
+      _playErrorSound();
       setState(() {
         _verificationStatus = VerificationStatus.error;
         _verificationMessage = parsed.error ?? 'Invalid QR code';
@@ -708,6 +758,7 @@ class _VerifyScreenState extends State<VerifyScreen>
 
     if (parsed.isStructured && !parsed.payload!.isFresh) {
       if (!mounted) return;
+      _playErrorSound();
       setState(() {
         _verificationStatus = VerificationStatus.error;
         _verificationMessage =
@@ -717,27 +768,7 @@ class _VerifyScreenState extends State<VerifyScreen>
       return;
     }
 
-    await _verifyLicense(parsed.registerNumber);
-
-    if (!mounted || _verificationLicense == null || !parsed.isStructured) {
-      return;
-    }
-
-    final payload = parsed.payload!;
-    final license = _verificationLicense!;
-    final matchesLiveRecord =
-        license.id == payload.licenseId &&
-        license.registerNumber == payload.registerNumber;
-
-    if (!matchesLiveRecord) {
-      setState(() {
-        _verificationStatus = VerificationStatus.error;
-        _verificationMessage =
-            'QR details do not match the current Supabase license record.';
-        _verificationLicense = null;
-        _verificationOffenses = [];
-      });
-    }
+    await _verifyLicense(parsed.registerNumber, qrPayload: parsed.isStructured ? parsed.payload : null);
   }
 
   bool _isValidRegistrationNumber(String value) {
