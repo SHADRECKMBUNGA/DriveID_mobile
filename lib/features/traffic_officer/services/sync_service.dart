@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:developer';
 import '../../../core/services/local_database_service.dart';
@@ -30,7 +31,21 @@ class SyncService {
 
   Future<bool> isOnline() async {
     final results = await _connectivity.checkConnectivity();
-    return results.isNotEmpty && results.first != ConnectivityResult.none;
+    final hasPluginConnection = results.isNotEmpty && !results.contains(ConnectivityResult.none);
+    
+    if (hasPluginConnection) {
+      return true;
+    }
+    
+    // Fallback if plugin says none but we actually have internet (Windows bug)
+    try {
+      final request = await HttpClient().getUrl(Uri.parse('https://gpdoptmvqafdfsmjublp.supabase.co'));
+      final response = await request.close();
+      if (response.statusCode > 0) return true;
+    } catch (_) {
+      return false;
+    }
+    return false;
   }
 
   Future<void> downloadAndCacheData() async {

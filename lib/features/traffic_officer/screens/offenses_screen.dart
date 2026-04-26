@@ -31,6 +31,7 @@ class _OffensesScreenState extends State<OffensesScreen> {
   List<License> _allLicenses = [];
   bool _isLoading = true;
   bool _isSubmitting = false;
+  String? _loadError;
 
   @override
   void initState() {
@@ -39,7 +40,10 @@ class _OffensesScreenState extends State<OffensesScreen> {
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
     try {
       final offenses = await _offenseService.getOffenses();
       final fetchedTypes = await _offenseService.getOffenseTypes();
@@ -69,7 +73,10 @@ class _OffensesScreenState extends State<OffensesScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _loadError = e.toString();
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to load data: $e')),
@@ -403,6 +410,26 @@ class _OffensesScreenState extends State<OffensesScreen> {
 
             if (_isLoading)
               const Center(child: CircularProgressIndicator())
+            else if (_loadError != null)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppTheme.error.withAlpha(26),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.error),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.error_outline, color: AppTheme.error, size: 48),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Error loading data:\\n$_loadError',
+                      style: const TextStyle(color: AppTheme.error),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              )
             else if (_offenses.isEmpty)
               Container(
                 padding: const EdgeInsets.all(40),

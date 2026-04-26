@@ -146,18 +146,9 @@ class OffenseService {
         return pending.map((json) => Offense.fromJson(Map<String, dynamic>.from(json))).toList();
       }
       
-      final user = await AuthService.currentUser;
-      final officerId = user?.id;
-
-      var query = _client
+      final response = await _client
           .from('offenses')
-          .select();
-      
-      if (officerId != null) {
-        query = query.eq('officer_id', officerId);
-      }
-
-      final response = await query
+          .select()
           .order('created_at', ascending: false)
           .timeout(_requestTimeout, onTimeout: () => []);
       final offenses = (response as List<dynamic>?) ?? [];
@@ -226,19 +217,15 @@ class OffenseService {
         throw Exception('License not found - license number is invalid');
       }
 
-      final user = await AuthService.currentUser;
-      final officerId = user?.id;
-
       final payload = {
         'name': name,
         'license_number': licenseNumber,
-        'offense_type_id': offenseTypeId,
+        if (offenseTypeId.length > 10) 'offense_type_id': offenseTypeId,
         'offense_type': offenseType,
         'location': location,
         'status': 'Pending',
         'fine': fine,
         'created_at': DateTime.now().toUtc().toIso8601String(),
-        if (officerId != null) 'officer_id': officerId,
       };
 
       if (!await SyncService().isOnline()) {
@@ -270,9 +257,6 @@ class OffenseService {
         throw Exception('License not found - cannot record offense');
       }
 
-      final user = await AuthService.currentUser;
-      final officerId = user?.id;
-
       final payload = {
         'name': licenseOwnerName,
         'license_number': licenseNumber,
@@ -281,7 +265,6 @@ class OffenseService {
         'status': 'Pending',
         'fine': fine,
         'created_at': DateTime.now().toUtc().toIso8601String(),
-        if (officerId != null) 'officer_id': officerId,
       };
 
       if (!await SyncService().isOnline()) {
