@@ -64,16 +64,10 @@ class _OffenseFormState extends State<OffenseForm> {
       return;
     }
 
-    if (_locationController.text.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Please enter a location')));
-      return;
-    }
-
     setState(() => _isSubmitting = true);
 
     final fine = widget.offenseFines[_offenseTypeController.text] ?? 'TBD';
+    
     final formData = OffenseFormData(
       offenseType: _offenseTypeController.text,
       fine: fine,
@@ -127,12 +121,35 @@ class _OffenseFormState extends State<OffenseForm> {
                 ],
               ),
               const SizedBox(height: 6),
-              Text(
-                'License Owner: ${widget.licenseOwnerName}',
-                style: const TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontSize: 12,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'License Owner: ${widget.licenseOwnerName}',
+                    style: const TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                  if (_isFetchingLocation)
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation(AppTheme.success),
+                      ),
+                    )
+                  else if (_latitude != null && _longitude != null)
+                    Text(
+                      'GPS ✓ ${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)}',
+                      style: const TextStyle(
+                        color: AppTheme.success,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 20),
 

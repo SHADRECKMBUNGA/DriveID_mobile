@@ -65,7 +65,7 @@ class OffenseService {
             rethrow;
           }
 
-          const removableColumns = ['fine', 'status', 'location', 'name'];
+          const removableColumns = ['fine', 'status', 'location', 'name', 'latitude', 'longitude'];
           final missingColumn = removableColumns.cast<String?>().firstWhere(
             (column) => column != null &&
                 error.message.toLowerCase().contains(column.toLowerCase()),
