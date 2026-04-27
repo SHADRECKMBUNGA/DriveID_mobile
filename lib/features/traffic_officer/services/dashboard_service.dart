@@ -93,10 +93,6 @@ class DashboardService {
 
   Future<DashboardStats> getDashboardStats() async {
     try {
-      final user = await AuthService.currentUser;
-      final officerId = user?.id;
-      if (officerId == null) throw Exception('No logged-in officer found');
-
       final today = DateTime.now();
       final startOfDay = DateTime(today.year, today.month, today.day);
       final endOfDay = startOfDay.add(const Duration(days: 1));
@@ -104,7 +100,6 @@ class DashboardService {
       final futureVerificationsResponse = _client
           .from('verifications')
           .select()
-          .eq('officer_id', officerId)
           .gte('verified_at', startOfDay.toUtc().toIso8601String())
           .lt('verified_at', endOfDay.toUtc().toIso8601String())
           .timeout(_requestTimeout, onTimeout: () => []);
@@ -112,13 +107,11 @@ class DashboardService {
       final futureTotalVerificationsResponse = _client
           .from('verifications')
           .select()
-          .eq('officer_id', officerId)
           .timeout(_requestTimeout, onTimeout: () => []);
 
       final futureOffensesResponse = _client
           .from('offenses')
           .select()
-          .eq('officer_id', officerId)
           .gte('created_at', startOfDay.toUtc().toIso8601String())
           .lt('created_at', endOfDay.toUtc().toIso8601String())
           .timeout(_requestTimeout, onTimeout: () => []);
@@ -126,7 +119,6 @@ class DashboardService {
       final futurePendingOffensesResponse = _client
           .from('offenses')
           .select()
-          .eq('officer_id', officerId)
           .eq('status', 'Pending')
           .timeout(_requestTimeout, onTimeout: () => []);
 
@@ -155,13 +147,10 @@ class DashboardService {
 
   Future<void> recordVerification(String licenseNumber) async {
     final nowUtc = DateTime.now().toUtc().toIso8601String();
-    final user = await AuthService.currentUser;
-    final officerId = user?.id;
 
     final payload = {
       'license_number': licenseNumber,
       'verified_at': nowUtc,
-      if (officerId != null) 'officer_id': officerId,
     };
 
     if (!await SyncService().isOnline()) {
