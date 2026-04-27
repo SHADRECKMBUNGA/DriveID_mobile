@@ -30,8 +30,8 @@ class LicenseQrPayload {
 
   factory LicenseQrPayload.fromJsonMap(Map<String, dynamic> json) {
     return LicenseQrPayload(
-      licenseId: json['licenseId']?.toString() ?? '',
-      registerNumber: json['registerNumber']?.toString() ?? '',
+      licenseId: json['licenseId']?.toString().trim() ?? '',
+      registerNumber: json['registerNumber']?.toString().trim().toUpperCase() ?? '',
       issuedAt: DateTime.parse(json['issuedAt'].toString()).toUtc(),
       expiryDate: DateTime.parse(json['expiryDate'].toString()).toUtc(),
     );
@@ -68,8 +68,8 @@ class LicenseQrPayload {
         return const LicenseQrParseResult.invalid('QR code version is not supported.');
       }
 
-      final registerNumber = decoded['registerNumber']?.toString() ?? '';
-      final licenseId = decoded['licenseId']?.toString() ?? '';
+      final registerNumber = decoded['registerNumber']?.toString().trim().toUpperCase() ?? '';
+      final licenseId = decoded['licenseId']?.toString().trim() ?? '';
       final issuedAtRaw = decoded['issuedAt']?.toString();
       final expiryRaw = decoded['expiryDate']?.toString();
 
@@ -93,12 +93,12 @@ class LicenseQrPayload {
       if (value.contains('|')) {
         final parts = value.split('|');
         if (parts.isNotEmpty && _isLegacyRegisterNumber(parts[0])) {
-          return LicenseQrParseResult.legacy(parts[0]);
+          return LicenseQrParseResult.legacy(parts[0].trim().toUpperCase());
         }
       }
       
       if (_isLegacyRegisterNumber(value)) {
-        return LicenseQrParseResult.legacy(value);
+        return LicenseQrParseResult.legacy(value.trim().toUpperCase());
       }
       return const LicenseQrParseResult.invalid('QR code could not be read.');
     }

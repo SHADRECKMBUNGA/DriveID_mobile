@@ -69,9 +69,9 @@ class OffenseType {
 
   factory OffenseType.fromJson(Map<String, dynamic> json) {
     return OffenseType(
-      id: json['id'] as String,
-      label: json['label'] as String,
-      fine: json['fine'] as String,
+      id: json['id']?.toString() ?? '',
+      label: json['label']?.toString() ?? 'Unknown Offense',
+      fine: json['fine']?.toString() ?? 'TBD',
     );
   }
 
