@@ -2,9 +2,10 @@ import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'dart:html' as html;
 import 'core/config/supabase_config.dart';
 import 'core/models/app_user.dart';
+import 'core/utils/browser_location_stub.dart'
+    if (dart.library.html) 'core/utils/browser_location.dart' as browser_location;
 import 'core/theme/app_theme.dart';
 import 'features/driver/driver_dashboard.dart';
 import 'features/traffic_officer/screens/dashboard_screen.dart';
@@ -52,7 +53,7 @@ class _MyAppState extends State<MyApp> {
 
     // Handle initial URL on web for OAuth redirect
     if (kIsWeb) {
-      final uri = Uri.parse(html.window.location.href);
+      final uri = Uri.parse(browser_location.getBrowserLocationHref());
       if (uri.queryParameters.containsKey('code') && uri.queryParameters.containsKey('state')) {
         _handleDeepLink(uri);
       }
@@ -61,42 +62,66 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _handleDeepLink(Uri uri) async {
     final isMobileCallback = uri.scheme == 'myapp' && uri.host == 'callback';
-    final isWebCallback = uri.scheme == 'http' && uri.host == 'localhost' && 
-                         uri.queryParameters.containsKey('code') && uri.queryParameters.containsKey('state');
+    final isWebCallback = uri.scheme == 'http' && uri.host == 'localhost' && uri.path == '/callback' &&
+                         (uri.queryParameters.containsKey('code') || uri.queryParameters.containsKey('uin'));
     
     if (isMobileCallback || isWebCallback) {
       final code = uri.queryParameters['code'];
       final state = uri.queryParameters['state'];
+      final uin = uri.queryParameters['uin'] ?? uri.queryParameters['identity'] ?? uri.queryParameters['identity_id'];
       
       if (code != null && state != null) {
         try {
-          // Validate callback parameters
+          // Validate callback parameters locally before sending the authorization code to backend.
           final isValid = await AuthService.validateCallbackParams(state, code);
           if (!isValid) {
             _showError('Invalid authentication parameters');
             return;
           }
-          
-          final tokenData = await AuthService.exchangeCodeForToken(code, state);
-          if (tokenData != null) {
-            final accessToken = tokenData['access_token'];
-            final idToken = tokenData['id_token'];
-            if (accessToken != null && idToken != null) {
-              await AuthService.storeTokens(accessToken, idToken);
-              if (mounted) {
-                Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
-              }
-            } else {
-              _showError('Invalid token response');
-            }
-          } else {
-            _showError('Failed to exchange code for token');
+
+          final user = await AuthService.processEsignetCallback(
+            code: code,
+            state: state,
+            redirectUri: AuthService.redirectUri,
+          );
+
+          if (user == null) {
+            _showError('Failed to verify eSignet user');
+            return;
+          }
+
+          if (!user.canAccessMobile) {
+            await AuthService.logout();
+            _showError('This account is not allowed on mobile.');
+            return;
+          }
+
+          if (mounted) {
+            Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
+          }
+        } catch (e) {
+          _showError('Error during authentication: $e');
+        }
+      } else if (uin != null && uin.isNotEmpty) {
+        try {
+          final user = await AuthService.verifyUin(uin);
+          if (user == null) {
+            _showError('User not registered');
+            return;
+          }
+          if (!user.canAccessMobile) {
+            await AuthService.logout();
+            _showError('This account is not allowed on mobile.');
+            return;
+          }
+          if (mounted) {
+            Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
           }
         } catch (e) {
           _showError('Error during authentication: $e');
         }
       } else {
-        _showError('Authorization code or state not found');
+        _showError('Authorization code, state or UIN not found');
       }
     }
   }
@@ -116,6 +141,7 @@ class _MyAppState extends State<MyApp> {
       initialRoute: '/',
       routes: {
         '/': (context) => const AuthWrapper(),
+        '/callback': (context) => const AuthWrapper(),
         '/login': (context) => const LoginScreen(),
         '/traffic-dashboard': (context) => const DashboardScreen(),
         '/driver-dashboard': (context) => DriverDashboard(),

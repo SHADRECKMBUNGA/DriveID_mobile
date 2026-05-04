@@ -47,6 +47,17 @@ INSERT INTO officers (email, first_name, last_name, role, employment_number, sta
 VALUES ('admin@driveid.gov', 'System', 'Administrator', 'admin', 'ADMIN001', 'Central Office');
 ```
 
+### Create profiles table:
+```sql
+CREATE TABLE profiles (
+  id UUID REFERENCES auth.users(id) PRIMARY KEY,
+  uin TEXT UNIQUE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
+
+> The `profiles` table is the authoritative eSignet mapping. eSignet login must only succeed for existing rows in `profiles`; do not create new users during callback handling.
+
 ### Create drivers table:
 ```sql
 CREATE TABLE drivers (

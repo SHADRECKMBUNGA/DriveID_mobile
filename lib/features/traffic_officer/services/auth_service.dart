@@ -19,9 +19,30 @@ class AuthService {
 
   static String get baseUrl => 'http://$localHost:8088';
   static const String clientId =
-      "IIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxRwpK";
-  static const String redirectUri = "http://localhost:5000";
+      "IIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAhNWtJ";
   static const String scope = "openid profile";
+
+  static String get redirectUri {
+    if (kIsWeb) {
+      return 'http://localhost:3000/callback';
+    }
+    if (Platform.isAndroid) {
+      return 'myapp://callback';
+    }
+    return 'myapp://callback';
+  }
+
+  static String get authorizationEndpoint => 'http://$localHost:3000/authorize';
+
+  static String get backendVerifyUrl {
+    if (kIsWeb) {
+      return 'http://localhost:54321/functions/v1/esignet-login';
+    }
+    if (Platform.isAndroid) {
+      return 'http://10.0.2.2:54321/functions/v1/esignet-login';
+    }
+    return 'http://localhost:54321/functions/v1/esignet-login';
+  }
 
   // Generate random state and nonce for each authentication request
   static String _generateRandomString(int length) {
@@ -42,9 +63,7 @@ class AuthService {
     return base64Url.encode(digest.bytes).replaceAll('=', '');
   }
 
-  static String get authorizationEndpoint => 'http://$localHost:3000/authorize';
-  static String get tokenEndpoint =>
-      '$baseUrl/v1/esignet/oauth/v2/token';
+  static String get tokenEndpoint => '$baseUrl/v1/esignet/oauth/v2/token';
 
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
   
@@ -193,143 +212,161 @@ class AuthService {
       if (!await validateState(state)) {
         throw Exception('Invalid state parameter - possible CSRF attack');
       }
-      
-      final codeVerifier = await getStoredCodeVerifier();
-      if (codeVerifier == null) {
-        throw Exception('Code verifier not found');
-      }
-      
+
       final response = await http.post(
-        Uri.parse(tokenEndpoint),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: {
-          'grant_type': 'authorization_code',
-          'client_id': clientId,
-          'redirect_uri': redirectUri,
+        Uri.parse(backendVerifyUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
           'code': code,
-          'code_verifier': codeVerifier,
-        },
+          'state': state,
+          'redirect_uri': redirectUri,
+        }),
       );
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        
-        // Validate nonce in ID token if present
-        final storedNonce = await getStoredNonce();
-        if (storedNonce != null && data['id_token'] != null) {
-          final idTokenPayload = JwtDecoder.decode(data['id_token']);
-          final tokenNonce = idTokenPayload['nonce'];
-          if (tokenNonce != storedNonce) {
-            throw Exception('Invalid nonce in ID token');
-          }
-        }
-        
-        // Store tokens
-        await storeTokens(data['access_token'], data['id_token']);
-        
-        // Clear OAuth parameters after successful authentication
-        await clearOAuthParams();
-        
-        // Get user info from ID token
-        final userInfo = JwtDecoder.decode(data['id_token']);
-        print('eSignet userInfo: $userInfo');
-        
-        // Sync with Supabase
-        final appUser = await _syncESignetUser(userInfo);
-        if (appUser == null) {
-          throw Exception('Failed to load eSignet user profile');
-        }
-
-        await _storeUserInfo(appUser);
-        
-        return data;
-      } else {
-        throw Exception('Failed to exchange code for token: ${response.statusCode}');
+      if (response.statusCode != 200) {
+        final result = json.decode(response.body);
+        throw Exception(result['error'] ?? 'Failed to verify eSignet callback');
       }
+
+      final result = json.decode(response.body) as Map<String, dynamic>;
+      final userData = result['user'] as Map<String, dynamic>?;
+      if (userData == null) {
+        throw Exception('Invalid response from backend');
+      }
+
+      final appUser = AppUser.fromJson(userData);
+      await _storeUserInfo(appUser);
+      await clearOAuthParams();
+      return {'user': appUser.toJson()};
     } catch (e) {
-      // Clear OAuth parameters on error as well
       await clearOAuthParams();
       throw Exception('Network error: $e');
     }
   }
+
+  static Future<AppUser?> processEsignetCallback({
+    required String code,
+    required String state,
+    required String redirectUri,
+  }) async {
+    if (!await validateCallbackParams(state, code)) {
+      throw Exception('Invalid authentication parameters');
+    }
+
+    final response = await http.post(
+      Uri.parse(backendVerifyUrl),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'code': code,
+        'state': state,
+        'redirect_uri': redirectUri,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      final payload = json.decode(response.body);
+      throw Exception(payload['error'] ?? 'Authentication failed');
+    }
+
+    final payload = json.decode(response.body) as Map<String, dynamic>;
+    final userMap = payload['user'] as Map<String, dynamic>?;
+    if (userMap == null) {
+      throw Exception('Invalid response from backend');
+    }
+
+    final appUser = AppUser.fromJson(userMap);
+    await _storeUserInfo(appUser);
+    return appUser;
+  }
+
+  static Future<AppUser?> verifyUin(String uin) async {
+    final response = await http.post(
+      Uri.parse(backendVerifyUrl),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'uin': uin}),
+    );
+
+    if (response.statusCode != 200) {
+      final payload = json.decode(response.body);
+      throw Exception(payload['error'] ?? 'User verification failed');
+    }
+
+    final payload = json.decode(response.body) as Map<String, dynamic>;
+    final userMap = payload['user'] as Map<String, dynamic>?;
+    if (userMap == null) {
+      throw Exception('Invalid response from backend');
+    }
+
+    final appUser = AppUser.fromJson(userMap);
+    await _storeUserInfo(appUser);
+    return appUser;
+  }
   
   static Future<AppUser?> _syncESignetUser(Map<String, dynamic> userInfo) async {
     try {
-      final email = userInfo['email']?.toString();
-      final currentSupabaseUser = _supabase.auth.currentUser;
+      final uin = userInfo['uin']?.toString() ??
+          userInfo['UIN']?.toString() ??
+          userInfo['unique_id']?.toString() ??
+          userInfo['identity_number']?.toString() ??
+          userInfo['sub']?.toString();
 
-      if (email == null || email.isEmpty) {
-        throw Exception('Email not provided by eSignet');
+      if (uin == null || uin.isEmpty) {
+        throw Exception('UIN not provided by eSignet');
       }
-      
-      // Check if user exists in drivers table
-      final existingDriver = await _supabase
+
+      final profile = await _supabase
+          .from('profiles')
+          .select('id')
+          .eq('uin', uin)
+          .maybeSingle();
+
+      if (profile == null) {
+        throw Exception('User not registered');
+      }
+
+      final authUserId = profile['id']?.toString();
+      if (authUserId == null || authUserId.isEmpty) {
+        throw Exception('Invalid user mapping');
+      }
+
+      final driver = await _supabase
           .from('drivers')
           .select()
-          .eq('email', email)
+          .eq('auth_user_id', authUserId)
           .maybeSingle();
-      
-      if (existingDriver != null) {
-        // Link auth_user_id if not already linked
-        if (currentSupabaseUser != null && existingDriver['auth_user_id'] == null) {
-          await _supabase.from('drivers').update({
-            'auth_user_id': currentSupabaseUser.id
-          }).eq('id', existingDriver['id']);
-        }
 
+      if (driver != null) {
         final license = await _supabase
             .from('licenses')
             .select()
-            .eq('driver_id', existingDriver['id'])
+            .eq('driver_id', driver['id'])
             .maybeSingle();
 
         return AppUser(
-          id: currentSupabaseUser?.id ?? existingDriver['id'].toString(),
-          email: email,
+          id: authUserId,
+          email: driver['email']?.toString() ?? '',
           role: 'driver',
-          userData: existingDriver,
+          userData: driver,
           license: license,
         );
       }
-      
-      // Check if user exists in officers table
-      final existingOfficer = await _supabase
+
+      final officer = await _supabase
           .from('officers')
           .select()
-          .eq('email', email)
+          .eq('auth_user_id', authUserId)
           .maybeSingle();
-      
-      if (existingOfficer != null) {
-        if (currentSupabaseUser != null && existingOfficer['auth_user_id'] == null) {
-          await _supabase.from('officers').update({
-            'auth_user_id': currentSupabaseUser.id
-          }).eq('id', existingOfficer['id']);
-        }
 
+      if (officer != null) {
         return AppUser(
-          id: currentSupabaseUser?.id ?? existingOfficer['id'].toString(),
-          email: email,
-          role: existingOfficer['role']?.toString() ?? 'traffic_officer',
-          userData: existingOfficer,
+          id: authUserId,
+          email: officer['email']?.toString() ?? '',
+          role: officer['role']?.toString() ?? 'traffic_officer',
+          userData: officer,
         );
       }
-      
-      // For testing: create a default officer if not found
-      final newOfficer = await _supabase.from('officers').insert({
-        'email': email,
-        'first_name': userInfo['given_name'] ?? 'eSignet',
-        'last_name': userInfo['family_name'] ?? 'User',
-        'role': 'traffic_officer',
-        'employment_number': 'ESIGNET${DateTime.now().millisecondsSinceEpoch}',
-        'station': 'eSignet Station',
-      }).select().single();
-      
-      return AppUser(
-        id: newOfficer['id'].toString(),
-        email: email,
-        role: 'traffic_officer',
-        userData: newOfficer,
-      );
+
+      throw Exception('User is not linked to a supported role');
     } catch (e) {
       throw Exception('Failed to sync eSignet user: $e');
     }

@@ -91,4 +91,22 @@ class AppUser {
       'license': license,
     };
   }
+
+  factory AppUser.fromJson(Map<String, dynamic> json) {
+    return AppUser(
+      id: json['id']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      role: json['role']?.toString() ?? '',
+      userData: json['userData'] is Map<String, dynamic>
+          ? json['userData'] as Map<String, dynamic>
+          : json['userData'] != null
+              ? Map<String, dynamic>.from(json['userData'])
+              : null,
+      license: json['license'] is Map<String, dynamic>
+          ? json['license'] as Map<String, dynamic>
+          : json['license'] != null
+              ? Map<String, dynamic>.from(json['license'])
+              : null,
+    );
+  }
 }
