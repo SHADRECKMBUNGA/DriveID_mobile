@@ -1,24 +1,50 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:math';
 import '../../../core/models/app_user.dart';
 
 
 class AuthService {
-  static const String baseUrl = "http://localhost:8088";
-  static const String clientId =
-      "IIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAs0vuF";
-  static const String redirectUri = "myapp://callback";
-  static const String scope = "openid profile";
-  static const String state = "eree2311";
-  static const String nonce = "973eieljzng";
+  static String get localHost {
+    if (kIsWeb) return 'localhost';
+    if (Platform.isAndroid) return '10.0.2.2';
+    return 'localhost';
+  }
 
-  static const String authorizationEndpoint = "http://localhost:8088/authorize";
-  static const String tokenEndpoint =
-      "http://localhost:8088/v1/esignet/oauth/v2/token";
+  static String get baseUrl => 'http://$localHost:8088';
+  static const String clientId =
+      "IIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxRwpK";
+  static const String redirectUri = "http://localhost:5000";
+  static const String scope = "openid profile";
+
+  // Generate random state and nonce for each authentication request
+  static String _generateRandomString(int length) {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    final random = Random.secure();
+    return String.fromCharCodes(
+      Iterable.generate(length, (_) => chars.codeUnitAt(random.nextInt(chars.length))),
+    );
+  }
+
+  static String generateState() => _generateRandomString(16);
+  static String generateNonce() => _generateRandomString(16);
+  static String generateCodeVerifier() => _generateRandomString(64); // 64 chars for PKCE
+
+  static String generateCodeChallenge(String codeVerifier) {
+    final bytes = utf8.encode(codeVerifier);
+    final digest = sha256.convert(bytes);
+    return base64Url.encode(digest.bytes).replaceAll('=', '');
+  }
+
+  static String get authorizationEndpoint => 'http://$localHost:3000/authorize';
+  static String get tokenEndpoint =>
+      '$baseUrl/v1/esignet/oauth/v2/token';
 
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
   
@@ -74,10 +100,53 @@ class AuthService {
   // NO SIGN UP FOR DRIVERS - Removed intentionally
   // Drivers must be created by Licensing Officers in the Desktop App
 
-  // ==================== ESIGNET AUTH ====================
+  // ==================== OAUTH PARAMETER MANAGEMENT ====================
   
-  static String getAuthorizationUrl() {
-    return Uri.parse(authorizationEndpoint).replace(
+  static Future<String?> getStoredState() async {
+    return await _storage.read(key: 'oauth_state');
+  }
+  
+  static Future<String?> getStoredNonce() async {
+    return await _storage.read(key: 'oauth_nonce');
+  }
+  
+  static Future<String?> getStoredCodeVerifier() async {
+    return await _storage.read(key: 'oauth_code_verifier');
+  }
+  
+  static Future<void> clearOAuthParams() async {
+    await _storage.delete(key: 'oauth_state');
+    await _storage.delete(key: 'oauth_nonce');
+    await _storage.delete(key: 'oauth_code_verifier');
+  }
+  
+  static Future<bool> validateState(String receivedState) async {
+    final storedState = await getStoredState();
+    return storedState != null && storedState == receivedState;
+  }
+  
+  static Future<bool> validateCallbackParams(String receivedState, String receivedCode) async {
+    // Validate state parameter
+    if (!await validateState(receivedState)) {
+      return false;
+    }
+    
+    // Additional validation can be added here (e.g., code format validation)
+    return receivedCode.isNotEmpty;
+  }
+  
+  static Future<Map<String, String>> getAuthorizationUrlWithParams() async {
+    final state = generateState();
+    final nonce = generateNonce();
+    final codeVerifier = generateCodeVerifier();
+    final codeChallenge = generateCodeChallenge(codeVerifier);
+    
+    // Store state, nonce, and code_verifier for validation during callback
+    await _storage.write(key: 'oauth_state', value: state);
+    await _storage.write(key: 'oauth_nonce', value: nonce);
+    await _storage.write(key: 'oauth_code_verifier', value: codeVerifier);
+    
+    final url = Uri.parse(authorizationEndpoint).replace(
       queryParameters: {
         'client_id': clientId,
         'redirect_uri': redirectUri,
@@ -85,12 +154,51 @@ class AuthService {
         'scope': scope,
         'state': state,
         'nonce': nonce,
+        'code_challenge': codeChallenge,
+        'code_challenge_method': 'S256',
+        'acr_values': 'mosip:idp:acr:generated-code',
+        'ui_locales': 'en',
+        'claims_locales': 'en',
+      },
+    ).toString();
+    
+    return {
+      'url': url,
+      'state': state,
+      'nonce': nonce,
+    };
+  }
+  
+  // Legacy method for backward compatibility
+  static String getAuthorizationUrl() {
+    // This method is deprecated - use getAuthorizationUrlWithParams() instead
+    return Uri.parse(authorizationEndpoint).replace(
+      queryParameters: {
+        'client_id': clientId,
+        'redirect_uri': redirectUri,
+        'response_type': 'code',
+        'scope': scope,
+        'state': generateState(),
+        'nonce': generateNonce(),
+        'acr_values': 'mosip:idp:acr:generated-code',
+        'ui_locales': 'en',
+        'claims_locales': 'en',
       },
     ).toString();
   }
 
-  static Future<Map<String, dynamic>?> exchangeCodeForToken(String code) async {
+  static Future<Map<String, dynamic>?> exchangeCodeForToken(String code, String state) async {
     try {
+      // Validate the state parameter
+      if (!await validateState(state)) {
+        throw Exception('Invalid state parameter - possible CSRF attack');
+      }
+      
+      final codeVerifier = await getStoredCodeVerifier();
+      if (codeVerifier == null) {
+        throw Exception('Code verifier not found');
+      }
+      
       final response = await http.post(
         Uri.parse(tokenEndpoint),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -99,17 +207,32 @@ class AuthService {
           'client_id': clientId,
           'redirect_uri': redirectUri,
           'code': code,
+          'code_verifier': codeVerifier,
         },
       );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         
+        // Validate nonce in ID token if present
+        final storedNonce = await getStoredNonce();
+        if (storedNonce != null && data['id_token'] != null) {
+          final idTokenPayload = JwtDecoder.decode(data['id_token']);
+          final tokenNonce = idTokenPayload['nonce'];
+          if (tokenNonce != storedNonce) {
+            throw Exception('Invalid nonce in ID token');
+          }
+        }
+        
         // Store tokens
         await storeTokens(data['access_token'], data['id_token']);
         
+        // Clear OAuth parameters after successful authentication
+        await clearOAuthParams();
+        
         // Get user info from ID token
         final userInfo = JwtDecoder.decode(data['id_token']);
+        print('eSignet userInfo: $userInfo');
         
         // Sync with Supabase
         final appUser = await _syncESignetUser(userInfo);
@@ -124,6 +247,8 @@ class AuthService {
         throw Exception('Failed to exchange code for token: ${response.statusCode}');
       }
     } catch (e) {
+      // Clear OAuth parameters on error as well
+      await clearOAuthParams();
       throw Exception('Network error: $e');
     }
   }
@@ -189,7 +314,22 @@ class AuthService {
         );
       }
       
-      throw Exception('User not found in system. Please contact administrator.');
+      // For testing: create a default officer if not found
+      final newOfficer = await _supabase.from('officers').insert({
+        'email': email,
+        'first_name': userInfo['given_name'] ?? 'eSignet',
+        'last_name': userInfo['family_name'] ?? 'User',
+        'role': 'traffic_officer',
+        'employment_number': 'ESIGNET${DateTime.now().millisecondsSinceEpoch}',
+        'station': 'eSignet Station',
+      }).select().single();
+      
+      return AppUser(
+        id: newOfficer['id'].toString(),
+        email: email,
+        role: 'traffic_officer',
+        userData: newOfficer,
+      );
     } catch (e) {
       throw Exception('Failed to sync eSignet user: $e');
     }

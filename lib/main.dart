@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:html' as html;
 import 'core/config/supabase_config.dart';
 import 'core/models/app_user.dart';
 import 'core/theme/app_theme.dart';
@@ -47,14 +49,35 @@ class _MyAppState extends State<MyApp> {
     _linkSubscription = _appLinks.uriLinkStream.listen((uri) async {
       await _handleDeepLink(uri);
     });
+
+    // Handle initial URL on web for OAuth redirect
+    if (kIsWeb) {
+      final uri = Uri.parse(html.window.location.href);
+      if (uri.queryParameters.containsKey('code') && uri.queryParameters.containsKey('state')) {
+        _handleDeepLink(uri);
+      }
+    }
   }
 
   Future<void> _handleDeepLink(Uri uri) async {
-    if (uri.scheme == 'myapp' && uri.host == 'callback') {
+    final isMobileCallback = uri.scheme == 'myapp' && uri.host == 'callback';
+    final isWebCallback = uri.scheme == 'http' && uri.host == 'localhost' && 
+                         uri.queryParameters.containsKey('code') && uri.queryParameters.containsKey('state');
+    
+    if (isMobileCallback || isWebCallback) {
       final code = uri.queryParameters['code'];
-      if (code != null) {
+      final state = uri.queryParameters['state'];
+      
+      if (code != null && state != null) {
         try {
-          final tokenData = await AuthService.exchangeCodeForToken(code);
+          // Validate callback parameters
+          final isValid = await AuthService.validateCallbackParams(state, code);
+          if (!isValid) {
+            _showError('Invalid authentication parameters');
+            return;
+          }
+          
+          final tokenData = await AuthService.exchangeCodeForToken(code, state);
           if (tokenData != null) {
             final accessToken = tokenData['access_token'];
             final idToken = tokenData['id_token'];
@@ -73,7 +96,7 @@ class _MyAppState extends State<MyApp> {
           _showError('Error during authentication: $e');
         }
       } else {
-        _showError('Authorization code not found');
+        _showError('Authorization code or state not found');
       }
     }
   }
