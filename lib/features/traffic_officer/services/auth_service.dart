@@ -26,20 +26,51 @@ class AuthService {
   static Uri getLoginUri() => Uri.parse(authorizationEndpoint);
 
   static Future<AppUser?> processBackendSessionToken(String token) async {
+    final existingToken = await _storage.read(key: _appTokenKey);
+    final incomingIat = _jwtIssuedAt(token);
+    final existingIat = existingToken == null ? null : _jwtIssuedAt(existingToken);
+    final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final incomingAgeSeconds =
+        incomingIat == null ? null : (nowSeconds - incomingIat).abs();
+
+    // Ignore stale callback intents when we already have an active session.
+    // Fresh login callbacks are expected to be very recent.
+    if (existingToken != null &&
+        incomingAgeSeconds != null &&
+        incomingAgeSeconds > 120) {
+      debugPrint(
+        '[AuthService] Ignoring old callback token age=${incomingAgeSeconds}s',
+      );
+      return refreshProfileFromBackend();
+    }
+
+    // Guard against stale deep links overriding a newer session token.
+    if (existingIat != null && incomingIat != null && incomingIat < existingIat) {
+      debugPrint(
+        '[AuthService] Ignoring stale token incomingIat=$incomingIat existingIat=$existingIat',
+      );
+      return refreshProfileFromBackend();
+    }
+
     await _storage.write(key: _appTokenKey, value: token);
     return refreshProfileFromBackend();
   }
 
   static Future<AppUser?> refreshProfileFromBackend() async {
     final token = await _storage.read(key: _appTokenKey);
-    if (token == null) return null;
+    if (token == null) {
+      debugPrint('[AuthService] No backend token in storage');
+      return null;
+    }
 
     final res = await http.get(
       Uri.parse(meEndpoint),
       headers: {'Authorization': 'Bearer $token'},
     );
+    debugPrint('[AuthService] /me status=${res.statusCode}');
 
     if (res.statusCode != 200) {
+      debugPrint('[AuthService] /me body=${res.body}');
       await _storage.delete(key: _appTokenKey);
       await _clearStoredUser();
       return null;
@@ -66,18 +97,20 @@ class AuthService {
   }
 
   static Future<AppUser?> get currentUser async {
-    final session = _supabase.auth.currentSession;
+    final backendUser = await refreshProfileFromBackend();
+    if (backendUser != null) {
+      debugPrint('[AuthService] currentUser from backend: ${backendUser.id} (${backendUser.role})');
+      return backendUser;
+    }
 
+    final session = _supabase.auth.currentSession;
     if (session != null) {
+      debugPrint('[AuthService] currentUser from Supabase session: ${session.user.id}');
       return _getUser(session.user);
     }
 
-    final stored = await getStoredUser();
-    if (stored != null) {
-      return stored;
-    }
-
-    return refreshProfileFromBackend();
+    debugPrint('[AuthService] currentUser fallback to stored user');
+    return getStoredUser();
   }
 
   static Future<String?> get appToken async {
@@ -159,5 +192,21 @@ class AuthService {
     await _supabase.auth.signOut();
     await _clearStoredUser();
     await _storage.delete(key: _appTokenKey);
+  }
+
+  static int? _jwtIssuedAt(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length < 2) return null;
+      final normalized = base64Url.normalize(parts[1]);
+      final payload = utf8.decode(base64Url.decode(normalized));
+      final map = json.decode(payload) as Map<String, dynamic>;
+      final iat = map['iat'];
+      if (iat is int) return iat;
+      if (iat is String) return int.tryParse(iat);
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 }

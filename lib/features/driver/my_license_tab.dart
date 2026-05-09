@@ -1,8 +1,11 @@
 // lib/features/driver/my_license_tab.dart
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../traffic_officer/services/auth_service.dart';
 import '../traffic_officer/models/driver_license.dart' as local;
 import '../driver/services/activity_service.dart';
 import '../driver/services/user_session.dart';
@@ -54,15 +57,95 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
   }
 
   Future<DriverFullProfile> _fetchFullProfile() async {
-    final supabase = Supabase.instance.client;
-    final user = supabase.auth.currentUser;
-    if (user == null) throw Exception('Not logged in');
+    final appToken = await AuthService.appToken;
+    if (appToken != null && appToken.isNotEmpty) {
+      final res = await http.get(
+        Uri.parse('${AuthService.backendBaseUrl}/driver/license'),
+        headers: {'Authorization': 'Bearer $appToken'},
+      );
 
-    final driverResponse = await supabase
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body) as Map<String, dynamic>;
+        final driver = Map<String, dynamic>.from(
+          data['driver'] as Map<String, dynamic>,
+        );
+        final licenseResponse = Map<String, dynamic>.from(
+          data['license'] as Map<String, dynamic>,
+        );
+        final citizen = data['citizen'] == null
+            ? null
+            : Map<String, dynamic>.from(data['citizen'] as Map<String, dynamic>);
+
+        final combined = {
+          ...licenseResponse,
+          'full_name': driver['full_name'],
+          'photo_url': driver['driver_photo_url'],
+          'register_number': licenseResponse['license_number'],
+          'license_type': licenseResponse['license_class'],
+          'status': licenseResponse['license_status'],
+        };
+
+        final license = local.DriverLicense.fromJson(combined);
+        final sex = citizen?['sex'] ?? 'Not available';
+        final nationality = citizen?['nationality'] ?? 'Not available';
+        final dob = citizen?['dob'] != null
+            ? DateTime.parse(citizen!['dob'])
+            : null;
+
+        if (!_isLogged) {
+          _isLogged = true;
+          final userId = license.driverId ?? driver['id']?.toString() ?? '';
+          UserSession().setUser(userId, reg: license.registerNumber);
+          unawaited(
+            ActivityService().logActivity(
+              userId: userId,
+              action: 'view_license',
+              details: 'Viewed digital license',
+            ),
+          );
+          _generateQRData(license.registerNumber);
+        }
+
+        return DriverFullProfile(
+          license: license,
+          sex: sex,
+          nationality: nationality,
+          dob: dob,
+        );
+      } else {
+        debugPrint('[MyLicenseTab] /driver/license status=${res.statusCode}');
+      }
+    }
+
+    final supabase = Supabase.instance.client;
+    final supabaseUser = supabase.auth.currentUser;
+    final appUser = await AuthService.currentUser;
+    final authUserId =
+        appUser?.userData?['auth_user_id']?.toString() ??
+        appUser?.id ??
+        supabaseUser?.id;
+    debugPrint(
+      '[MyLicenseTab] supabaseUser=${supabaseUser?.id} appUser=${appUser?.id} '
+      'appUser.auth_user_id=${appUser?.userData?['auth_user_id']} resolved=$authUserId',
+    );
+
+    if (authUserId == null || authUserId.isEmpty) {
+      throw Exception('Not logged in');
+    }
+
+    var driverResponse = await supabase
         .from('drivers')
         .select('id, full_name, driver_photo_url, national_id')
-        .eq('auth_user_id', user.id)
+        .eq('auth_user_id', authUserId)
         .maybeSingle();
+
+    if (driverResponse == null) {
+      driverResponse = await supabase
+          .from('drivers')
+          .select('id, full_name, driver_photo_url, national_id')
+          .eq('id', authUserId)
+          .maybeSingle();
+    }
 
     if (driverResponse == null) throw Exception('No driver profile found');
     final driverId = driverResponse['id'];
@@ -107,7 +190,7 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
     // Log activity only once
     if (!_isLogged) {
       _isLogged = true;
-      final userId = license.driverId ?? user.id;
+      final userId = license.driverId ?? authUserId;
       UserSession().setUser(userId, reg: license.registerNumber);
       // Use unawaited to avoid slowing down the future
       unawaited(

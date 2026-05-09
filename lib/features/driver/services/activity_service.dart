@@ -9,8 +9,9 @@ class ActivityService {
     String? details, required String userId,
   }) async {
     try {
-      // Omit user_id – the database will set it using DEFAULT auth.uid()
+      if (userId.trim().isEmpty) return;
       await _supabase.from('user_activities').insert({
+        'user_id': userId,
         'action': action,
         'details': details,
         'created_at': DateTime.now().toIso8601String(),
@@ -21,12 +22,10 @@ class ActivityService {
   }
 
   Future<List<Map<String, dynamic>>> fetchUserActivities(String userId) async {
-    final user = _supabase.auth.currentUser;
-    if (user == null) throw Exception('Not authenticated');
     final response = await _supabase
         .from('user_activities')
         .select()
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('created_at', ascending: false);
     return response;
   }
