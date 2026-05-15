@@ -1,3 +1,5 @@
+import 'dart:developer' show log;
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/config/supabase_config.dart';
@@ -191,6 +193,7 @@ class OffenseService {
     }
     
     final raw = await getOffenseTypesRaw();
+    log('OffenseService.getOffenseTypes raw response: $raw');
     await LocalDatabaseService.cacheOffenseTypes(raw);
     return raw.map((json) => OffenseType.fromJson(json)).toList();
   }
