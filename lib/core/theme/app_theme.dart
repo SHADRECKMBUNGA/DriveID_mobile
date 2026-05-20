@@ -96,4 +96,11 @@ class AppTheme {
       margin: const EdgeInsets.only(bottom: 12),
     ),
   );
+
+  // Background gradients for screens
+  static const LinearGradient backgroundGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [primaryDeepBlue, background],
+  );
 }

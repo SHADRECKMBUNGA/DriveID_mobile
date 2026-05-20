@@ -11,7 +11,6 @@ import 'core/utils/browser_location_stub.dart'
 import 'core/theme/app_theme.dart';
 
 import 'features/driver/driver_dashboard.dart';
-import 'features/welcome/welcome_screen.dart';
 import 'features/traffic_officer/screens/dashboard_screen.dart';
 import 'features/traffic_officer/screens/login_screen.dart';
 import 'features/traffic_officer/services/auth_service.dart';
@@ -105,7 +104,6 @@ class _MyAppState extends State<MyApp> {
       initialRoute: '/',
       routes: {
         '/': (context) => const AuthWrapper(),
-        '/welcome': (context) => const WelcomeScreen(),
         '/login': (context) => const LoginScreen(),
         '/traffic-dashboard': (context) => const DashboardScreen(),
         '/driver-dashboard': (context) => const DriverDashboard(),
@@ -155,6 +153,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
       return const DashboardScreen();
     }
 
-    return const WelcomeScreen();
+    return const LoginScreen();
   }
 }
