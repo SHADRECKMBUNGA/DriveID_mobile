@@ -132,15 +132,23 @@ class DashboardService {
       final offensesList = (responses[2] as List<dynamic>?) ?? [];
       final pendingOffensesList = (responses[3] as List<dynamic>?) ?? [];
 
-      return DashboardStats(
+      final stats = DashboardStats(
         verificationsToday: verificationsList.length,
         offensesRecorded: offensesList.length,
         totalVerifications: totalVerificationsList.length,
         pendingOffenses: pendingOffensesList.length,
       );
+      await LocalDatabaseService.cacheDashboardStats(stats.toJson());
+      return stats;
     } catch (e) {
       throw Exception('Failed to fetch dashboard stats: $e');
     }
+  }
+
+  DashboardStats? getCachedDashboardStats() {
+    final cached = LocalDatabaseService.getCachedDashboardStats();
+    if (cached == null) return null;
+    return DashboardStats.fromJson(cached);
   }
 
   Future<void> recordVerification(String licenseNumber) async {
