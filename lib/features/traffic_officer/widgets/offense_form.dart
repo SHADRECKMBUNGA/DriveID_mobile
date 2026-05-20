@@ -81,6 +81,7 @@ class _OffenseFormState extends State<OffenseForm> {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       child: Container(
+        width: double.infinity,
         decoration: const BoxDecoration(
           color: AppTheme.cardDark,
           borderRadius: BorderRadius.only(
@@ -163,7 +164,8 @@ class _OffenseFormState extends State<OffenseForm> {
                               _offenseTypeController.text.isEmpty
                                   ? null
                                   : _offenseTypeController.text,
-                          decoration: const InputDecoration(
+                          isExpanded: true,
+                        decoration: const InputDecoration(
                             border: InputBorder.none,
                             contentPadding: EdgeInsets.symmetric(
                               horizontal: 12,
