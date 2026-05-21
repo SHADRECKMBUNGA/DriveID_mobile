@@ -76,7 +76,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
         title: Text(
           _selectedIndex == 0
               ? 'My Digital License'
-              : (_selectedIndex == 1 ? 'History' : 'Settings'),
+              : (_selectedIndex == 1 ? 'Offenses & Fines' : 'Settings'),
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
         centerTitle: false,
@@ -95,7 +95,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
         onTap: (index) => setState(() => _selectedIndex = index),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.credit_card), label: 'My License'),
-          BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
+          BottomNavigationBarItem(icon: Icon(Icons.gavel), label: 'Fines'),
           BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
         ],
       ),

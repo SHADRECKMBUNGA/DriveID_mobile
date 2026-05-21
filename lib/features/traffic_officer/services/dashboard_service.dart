@@ -60,14 +60,22 @@ class DashboardService {
   }
 
   Future<Map<String, dynamic>?> _getLicenseRow(String licenseNumber) async {
-    log('Searching for license: $licenseNumber');
+    final normalized = licenseNumber.trim();
+    log('Searching for license: $normalized');
+
+    final backendRow = await AuthService.fetchLicenseForVerification(normalized);
+    if (backendRow != null) {
+      log('Found license via backend API: ${backendRow['id']}');
+      return backendRow;
+    }
+
     for (final column in _licenseIdentifierColumns) {
       try {
         log('Trying column: $column');
         final response = await _client
             .from('licenses')
             .select()
-            .eq(column, licenseNumber)
+            .eq(column, normalized)
             .maybeSingle()
             .timeout(_requestTimeout);
 
@@ -85,7 +93,7 @@ class DashboardService {
         rethrow;
       }
     }
-    log('License not found: $licenseNumber');
+    log('License not found: $normalized');
     return null;
   }
 

@@ -89,28 +89,54 @@ class LicenseQrPayload {
         ),
       );
     } catch (_) {
+      final fromUrl = _registerNumberFromVerificationUrl(value);
+      if (fromUrl != null) {
+        return LicenseQrParseResult.legacy(fromUrl);
+      }
+
       // Check for Driver App format: "REGISTER_NUMBER|TIMESTAMP"
       if (value.contains('|')) {
         final parts = value.split('|');
-        if (parts.isNotEmpty && _isLegacyRegisterNumber(parts[0])) {
-          return LicenseQrParseResult.legacy(parts[0].trim().toUpperCase());
+        final candidate = parts.first.trim().toUpperCase();
+        if (candidate.isNotEmpty && _isRecognizedLicenseNumber(candidate)) {
+          return LicenseQrParseResult.legacy(candidate);
         }
       }
-      
-      if (_isLegacyRegisterNumber(value)) {
-        return LicenseQrParseResult.legacy(value.trim().toUpperCase());
+
+      final normalized = value.trim().toUpperCase();
+      if (_isRecognizedLicenseNumber(normalized)) {
+        return LicenseQrParseResult.legacy(normalized);
       }
       return const LicenseQrParseResult.invalid('QR code could not be read.');
     }
   }
 
+  static String? _registerNumberFromVerificationUrl(String raw) {
+    final uri = Uri.tryParse(raw.trim());
+    if (uri == null) return null;
+
+    final segments =
+        uri.pathSegments.where((segment) => segment.isNotEmpty).toList();
+    final verifyIndex = segments.indexOf('verify');
+    if (verifyIndex < 0 || verifyIndex + 1 >= segments.length) {
+      return null;
+    }
+
+    final registerNumber = segments[verifyIndex + 1].trim().toUpperCase();
+    if (!_isRecognizedLicenseNumber(registerNumber)) {
+      return null;
+    }
+    return registerNumber;
+  }
+
   bool get isFresh => DateTime.now().toUtc().difference(issuedAt) <= maxAge;
 
-  static bool _isLegacyRegisterNumber(String value) {
+  static bool _isRecognizedLicenseNumber(String value) {
     final normalized = value.trim().toUpperCase();
-    // Matches DLV followed by a 4-digit year and 5-digit sequence (9 digits total)
-    final pattern = RegExp(r'^DLV\d{9}$');
-    return pattern.hasMatch(normalized);
+    if (normalized.length < 5) return false;
+    // Legacy DLV format or current MW-DL-* and similar issued numbers.
+    return RegExp(r'^(DLV\d{9}|MW-DL-[A-Z0-9\-]+|[A-Z0-9][A-Z0-9\-]{4,})$')
+        .hasMatch(normalized);
   }
 }
 

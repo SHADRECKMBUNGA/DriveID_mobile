@@ -130,13 +130,18 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<void> _load() async {
-    final user = await AuthService.currentUser;
-    if (!mounted) return;
-
-    setState(() {
-      _user = user;
-      _loading = false;
-    });
+    try {
+      final user = await AuthService.currentUser;
+      if (!mounted) return;
+      setState(() {
+        _user = user;
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint('[AuthWrapper] session load failed: $e');
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
   }
 
   @override

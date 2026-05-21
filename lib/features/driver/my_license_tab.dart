@@ -2,14 +2,8 @@
 // ignore_for_file: dead_code
 
 import 'dart:async';
-import 'dart:convert';
-import 'package:driveid_app/features/driver/services/activity_service.dart';
 import 'package:driveid_app/features/driver/services/user_session.dart';
-import 'package:driveid_app/features/driver/services/activity_service.dart';
-import 'package:driveid_app/features/driver/services/user_session.dart';
-import 'package:driveid_app/features/driver/settings_tab.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../traffic_officer/services/auth_service.dart';
@@ -37,7 +31,6 @@ class MyLicenseTab extends StatefulWidget {
 
 class _MyLicenseTabState extends State<MyLicenseTab> {
   late Future<DriverFullProfile> _profileFuture;
-  late Future<List<Map<String, dynamic>>> _offensesFuture;
   late Timer _qrRefreshTimer;
   final ValueNotifier<String> _qrData = ValueNotifier<String>('');
   bool _sessionSet = false;
@@ -45,9 +38,7 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
   @override
   void initState() {
     super.initState();
-    _loadData();
     _profileFuture = _fetchFullProfile();
-    _offensesFuture = _fetchOffenses();
     _qrRefreshTimer = Timer.periodic(const Duration(minutes: 5), (_) {
       if (_qrData.value.isNotEmpty) {
         final reg = _qrData.value.split('|')[0];
@@ -56,16 +47,11 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
     });
   }
 
-  void _loadData() {
-    _profileFuture = _fetchFullProfile();
-    _offensesFuture = _fetchOffenses();
-  }
-
   Future<void> _refresh() async {
     setState(() {
-      _loadData();
+      _profileFuture = _fetchFullProfile();
     });
-    await Future.wait([_profileFuture, _offensesFuture]);
+    await _profileFuture;
   }
 
   @override
@@ -76,6 +62,12 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
   }
 
   Future<DriverFullProfile> _fetchFullProfile() async {
+    final hasBackendSession = await AuthService.appToken != null;
+    if (hasBackendSession) {
+      final backendData = await AuthService.fetchDriverLicenseFromBackend();
+      return _profileFromBackendPayload(backendData);
+    }
+
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
     if (user == null) throw Exception('Not logged in');
@@ -101,11 +93,16 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
           .maybeSingle();
     }
 
-    final sex = citizenData?['sex'] ?? 'Not available';
-    final nationality = citizenData?['nationality'] ?? 'Not available';
-    final dob = citizenData?['dob'] != null
-        ? DateTime.parse(citizenData!['dob'])
-        : null;
+    final sex = _firstNonEmpty([
+      citizenData?['sex']?.toString(),
+      driverResponse['sex']?.toString(),
+    ]);
+    final nationality = _firstNonEmpty([
+      citizenData?['nationality']?.toString(),
+      driverResponse['nationality']?.toString(),
+    ]);
+    final dobRaw = citizenData?['dob'] ?? driverResponse['date_of_birth'];
+    final dob = dobRaw != null ? DateTime.tryParse(dobRaw.toString()) : null;
 
     final licenseResponse = await supabase
         .from('licenses')
@@ -114,6 +111,61 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
         .maybeSingle();
     if (licenseResponse == null) throw Exception('No license found');
 
+    return _profileFromRows(
+      licenseResponse: licenseResponse,
+      fullName: fullName,
+      photoUrl: photoUrl,
+      sex: sex,
+      nationality: nationality,
+      dob: dob,
+    );
+  }
+
+  DriverFullProfile _profileFromBackendPayload(Map<String, dynamic> data) {
+    final driver = Map<String, dynamic>.from(data['driver'] as Map);
+    final licenseResponse = Map<String, dynamic>.from(data['license'] as Map);
+    final citizen = data['citizen'] is Map
+        ? Map<String, dynamic>.from(data['citizen'] as Map)
+        : null;
+
+    final sex = _firstNonEmpty([
+      citizen?['sex']?.toString(),
+      driver['sex']?.toString(),
+    ]);
+    final nationality = _firstNonEmpty([
+      citizen?['nationality']?.toString(),
+      driver['nationality']?.toString(),
+    ]);
+    final dobRaw = citizen?['dob'] ?? driver['date_of_birth'];
+    final dob = dobRaw != null ? DateTime.tryParse(dobRaw.toString()) : null;
+
+    return _profileFromRows(
+      licenseResponse: licenseResponse,
+      fullName: driver['full_name']?.toString() ?? '',
+      photoUrl: driver['driver_photo_url']?.toString(),
+      sex: sex,
+      nationality: nationality,
+      dob: dob,
+    );
+  }
+
+  String _firstNonEmpty(List<String?> values) {
+    for (final value in values) {
+      if (value != null && value.trim().isNotEmpty) {
+        return value.trim();
+      }
+    }
+    return 'Not available';
+  }
+
+  DriverFullProfile _profileFromRows({
+    required Map<String, dynamic> licenseResponse,
+    required String fullName,
+    String? photoUrl,
+    required String sex,
+    required String nationality,
+    DateTime? dob,
+  }) {
     final combined = {
       ...licenseResponse,
       'full_name': fullName,
@@ -129,33 +181,6 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
       nationality: nationality,
       dob: dob,
     );
-  }
-
-  Future<List<Map<String, dynamic>>> _fetchOffenses() async {
-    final supabase = Supabase.instance.client;
-    final user = supabase.auth.currentUser;
-    if (user == null) return [];
-
-    final driver = await supabase
-        .from('drivers')
-        .select('id')
-        .eq('auth_user_id', user.id)
-        .maybeSingle();
-    if (driver == null) return [];
-
-    final license = await supabase
-        .from('licenses')
-        .select('license_number')
-        .eq('driver_id', driver['id'])
-        .maybeSingle();
-    if (license == null) return [];
-
-    final offenses = await supabase
-        .from('offenses')
-        .select()
-        .eq('registration_number', license['license_number'])
-        .order('created_at', ascending: false);
-    return offenses;
   }
 
   void _generateQRData(String registerNumber) {
@@ -185,7 +210,11 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: () => setState(() => _profileFuture = _fetchFullProfile()),
+                  onPressed: () {
+                    setState(() {
+                      _profileFuture = _fetchFullProfile();
+                    });
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFFC124),
                     foregroundColor: Colors.black87,
@@ -218,8 +247,6 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
                 ),
                 const SizedBox(height: 20),
                 _buildLicenseCard(profile),
-                const SizedBox(height: 20),
-                _buildOffensesCard(),
               ],
             ),
           ),
@@ -384,120 +411,6 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
       ),
     );
   }
-  Widget _buildOffensesCard() {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C24).withOpacity(0.7),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Row(
-                children: [
-                  Icon(Icons.gavel, color: Color(0xFFFFC124), size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    'OFFENSES & FINES',
-                    style: TextStyle(
-                      color: Color(0xFFFFC124),
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(color: Colors.white24, height: 1),
-            _buildOffensesList(),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOffensesList() {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _offensesFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Padding(
-            padding: EdgeInsets.all(16),
-            child: Center(child: CircularProgressIndicator(color: Color(0xFFFFC124))),
-          );
-        }
-        if (snapshot.hasError || snapshot.data == null) {
-          return const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('Failed to load offenses', style: TextStyle(color: Colors.white70)),
-          );
-        }
-        final offenses = snapshot.data!;
-        if (offenses.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('No offenses recorded', style: TextStyle(color: Colors.white54)),
-          );
-        }
-        return ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: offenses.length, // show all, can limit if needed
-          separatorBuilder: (_, __) => const Divider(color: Colors.white24, height: 1),
-          itemBuilder: (context, index) {
-            final off = offenses[index];
-            final status = off['status'] ?? 'Pending';
-            final isPaidOrResolved = status.toLowerCase() == 'paid' || status.toLowerCase() == 'resolved';
-            return ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              leading: Icon(
-                isPaidOrResolved ? Icons.check_circle : Icons.warning_amber,
-                color: isPaidOrResolved ? Colors.green : Colors.orange,
-              ),
-              title: Text(
-                off['offense_type'],
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
-              ),
-              subtitle: Text(
-                '${off['location']} • ${_formatDateString(off['created_at'])}',
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-              trailing: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('MK ${off['fine']}', style: const TextStyle(color: Color(0xFFFFC124), fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: isPaidOrResolved ? Colors.green.withOpacity(0.2) : Colors.red.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      status.toUpperCase(),
-                      style: TextStyle(
-                        color: isPaidOrResolved ? Colors.green : Colors.red,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
   Widget _infoColumn(IconData icon, String label, String value, {Color? valueColor}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -564,8 +477,4 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
 
   String _monthAbbr(int month) => const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month - 1];
 
-  String _formatDateString(String iso) {
-    final dt = DateTime.parse(iso);
-    return '${dt.day}/${dt.month}/${dt.year}';
-  }
 }

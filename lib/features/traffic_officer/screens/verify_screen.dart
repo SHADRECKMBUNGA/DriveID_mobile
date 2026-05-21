@@ -393,104 +393,127 @@ class _VerifyScreenState extends State<VerifyScreen>
   }
 
   Widget _manualView() {
-    return Column(
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            color: AppTheme.cardDark,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppTheme.cardBorder),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.gold.withAlpha(26),
-                blurRadius: 10,
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TextField(
-                  controller: _manualController,
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 16,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardDark,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppTheme.cardBorder),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.gold.withAlpha(26),
+                        blurRadius: 10,
+                      ),
+                    ],
                   ),
-                  decoration: const InputDecoration(
-                    hintText: "Enter license number",
-                    hintStyle: TextStyle(color: AppTheme.textLight),
-                    border: InputBorder.none,
-                    prefixIcon: Icon(Icons.search_outlined, color: AppTheme.gold),
-                    contentPadding: EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  keyboardType: TextInputType.text,
-                  textCapitalization: TextCapitalization.characters,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) => _onManualVerify(),
-                ),
-              ),
-              const Divider(height: 1, color: AppTheme.cardBorder),
-              Padding(
-                padding: const EdgeInsets.all(14),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, size: 14, color: AppTheme.textLight),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        "Format: DLV plus 4-digit year and 5 digits (e.g., DLV${DateTime.now().year}70394)",
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppTheme.textLight,
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: TextField(
+                          controller: _manualController,
+                          style: const TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 16,
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: "Enter license number",
+                            hintStyle: TextStyle(color: AppTheme.textLight),
+                            border: InputBorder.none,
+                            prefixIcon: Icon(
+                              Icons.search_outlined,
+                              color: AppTheme.gold,
+                            ),
+                            contentPadding: EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          keyboardType: TextInputType.text,
+                          textCapitalization: TextCapitalization.characters,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => _onManualVerify(),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          height: 54,
-          child: ElevatedButton(
-            onPressed: _isVerifying ? null : _onManualVerify,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.gold,
-              foregroundColor: Colors.black,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-            child: _isVerifying
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                    ),
-                  )
-                : const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.search, size: 20),
-                      SizedBox(width: 10),
-                      Text(
-                        "Verify License",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                      const Divider(height: 1, color: AppTheme.cardBorder),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 14,
+                              color: AppTheme.textLight,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                "Use the full number on the license (e.g. DLV202611111 or MW-DL-8267411572).",
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppTheme.textLight,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: _isVerifying ? null : _onManualVerify,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.gold,
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: _isVerifying
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.black,
+                              ),
+                            ),
+                          )
+                        : const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.search, size: 20),
+                              SizedBox(width: 10),
+                              Text(
+                                "Verify License",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -662,7 +685,7 @@ class _VerifyScreenState extends State<VerifyScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Invalid format. Use DLV followed by a 4-digit year and 5 digits.',
+            'Invalid license number. Use the full number shown on the license (e.g. MW-DL-8267411572).',
           ),
         ),
       );
@@ -809,8 +832,9 @@ class _VerifyScreenState extends State<VerifyScreen>
   }
 
   bool _isValidRegistrationNumber(String value) {
-    // Matches DLV followed by a 4-digit year and 5-digit sequence (9 digits total)
-    final pattern = RegExp(r'^DLV\d{9}$');
-    return pattern.hasMatch(value);
+    final normalized = value.trim().toUpperCase();
+    if (normalized.length < 5) return false;
+    return RegExp(r'^(DLV\d{9}|MW-DL-[A-Z0-9\-]+|[A-Z0-9][A-Z0-9\-]{4,})$')
+        .hasMatch(normalized);
   }
 }
