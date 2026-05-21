@@ -13,9 +13,16 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController _uinController = TextEditingController();
   bool _isLoading = false;
   bool _isHovered = false;
   bool _isPressed = false;
+
+  @override
+  void dispose() {
+    _uinController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -121,6 +128,29 @@ class _LoginScreenState extends State<LoginScreen> {
                                   fontSize: 13,
                                 ),
                               ),
+                              const SizedBox(height: 16),
+                              TextField(
+                                controller: _uinController,
+                                keyboardType: TextInputType.number,
+                                style: TextStyle(color: AppTheme.textPrimary),
+                                decoration: InputDecoration(
+                                  labelText: 'National ID (UIN)',
+                                  hintText: 'e.g. 2143058301 — required for test accounts',
+                                  labelStyle: TextStyle(color: AppTheme.textSecondary),
+                                  hintStyle: TextStyle(
+                                    color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                                    fontSize: 12,
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(color: AppTheme.cardBorder),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderSide: const BorderSide(color: AppTheme.secondaryTeal),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -208,7 +238,12 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final url = AuthService.getLoginUri();
+      final uin = _uinController.text.trim();
+      if (uin.isEmpty) {
+        _show('Enter your National ID (UIN) from TEST_ACCOUNTS.md', AppTheme.error);
+        return;
+      }
+      final url = AuthService.getLoginUri(uin: uin);
       await launchUrl(url, mode: LaunchMode.externalApplication);
     } catch (e) {
       _show('eSignet error', AppTheme.error);

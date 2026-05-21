@@ -13,6 +13,10 @@ class AuthService {
     'ESIGNET_HOST',
     defaultValue: '10.0.2.2',
   );
+  static const String _loginUin = String.fromEnvironment(
+    'LOGIN_UIN',
+    defaultValue: '',
+  );
 
   static String get localHost {
     if (kIsWeb) return 'localhost';
@@ -33,7 +37,15 @@ class AuthService {
   static const String _appTokenKey = 'app_jwt_token';
   static const Duration _httpTimeout = Duration(seconds: 8);
 
-  static Uri getLoginUri() => Uri.parse(authorizationEndpoint);
+  static Uri getLoginUri({String? uin}) {
+    final effectiveUin = (uin ?? _loginUin).trim();
+    if (effectiveUin.isEmpty) {
+      return Uri.parse(authorizationEndpoint);
+    }
+    return Uri.parse(authorizationEndpoint).replace(
+      queryParameters: {'uin': effectiveUin},
+    );
+  }
 
   static Future<http.Response> _backendGet(Uri uri, {required String? token}) async {
     return http
