@@ -73,7 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Container(
           width: 126,
           height: 126,
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: Colors.white.withValues(alpha: 0.06),
@@ -83,9 +83,9 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             boxShadow: [
               BoxShadow(
-                color: _goldPrimary.withValues(alpha: 0.24),
-                blurRadius: 34,
-                spreadRadius: 2,
+                color: _goldPrimary.withValues(alpha: 0.15),
+                blurRadius: 24,
+                spreadRadius: 1,
               ),
               const BoxShadow(
                 color: Color.fromRGBO(0, 0, 0, 0.34),
@@ -94,10 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ],
           ),
-          child: Image.asset(
-            'assets/branding/driveid_icon.png',
-            fit: BoxFit.contain,
-          ),
+          child: const _LicenceMark(),
         ),
         const SizedBox(height: 20),
         Text(
@@ -118,9 +115,9 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Traffic Officer Portal',
+          'Driver & Officer Portal',
           style: TextStyle(
-            color: AppTheme.textSecondary.withValues(alpha: 0.86),
+            color: AppTheme.textSecondary.withValues(alpha: 0.9),
             fontSize: 14,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.4,
@@ -178,8 +175,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     height: 48,
                     padding: const EdgeInsets.all(9),
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: _goldPrimary.withValues(alpha: 0.22),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _goldPrimary.withValues(alpha: 0.08),
+                          blurRadius: 18,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
                     ),
                     child: Image.asset(
                       'assets/branding/esignet_logo.png',
@@ -201,12 +208,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Verified identity for enforcement access',
+                          'Verified access for drivers and officers',
                           style: TextStyle(
                             color: AppTheme.textSecondary.withValues(
-                              alpha: 0.82,
+                              alpha: 0.94,
                             ),
-                            fontSize: 12,
+                            fontSize: 13,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -221,15 +228,16 @@ class _LoginScreenState extends State<LoginScreen> {
                   Expanded(
                     child: _trustPill(
                       Icons.verified_user_outlined,
-                      'Official',
+                      'Licence verified',
                       AppTheme.secondaryTeal,
+                      isProminent: true,
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: _trustPill(
                       Icons.lock_outline_rounded,
-                      'Encrypted',
+                      'Secure access',
                       _goldPrimary,
                     ),
                   ),
@@ -244,26 +252,33 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _trustPill(IconData icon, String label, Color color) {
+  Widget _trustPill(
+    IconData icon,
+    String label,
+    Color color, {
+    bool isProminent = false,
+  }) {
     return Container(
-      height: 42,
+      height: 38,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: color.withValues(alpha: isProminent ? 0.14 : 0.07),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.22)),
+        border: Border.all(
+          color: color.withValues(alpha: isProminent ? 0.26 : 0.14),
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 7),
+          Icon(icon, size: 15, color: color.withValues(alpha: 0.95)),
+          const SizedBox(width: 6),
           Flexible(
             child: Text(
               label,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: AppTheme.textPrimary.withValues(alpha: 0.9),
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -330,8 +345,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           : const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.login_rounded, size: 19, color: _ink),
-                              SizedBox(width: 10),
+                              Icon(Icons.login_rounded, size: 18, color: _ink),
+                              SizedBox(width: 12),
                               Text(
                                 'Continue with eSignet',
                                 style: TextStyle(
@@ -341,10 +356,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                   letterSpacing: 0.1,
                                 ),
                               ),
-                              SizedBox(width: 10),
+                              SizedBox(width: 12),
                               Icon(
                                 Icons.arrow_forward_rounded,
-                                size: 19,
+                                size: 18,
                                 color: _ink,
                               ),
                             ],
@@ -359,35 +374,49 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _footerNote() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.22),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.security_rounded,
-            size: 14,
-            color: _goldPrimary.withValues(alpha: 0.88),
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
           ),
-          const SizedBox(width: 7),
-          Flexible(
-            child: Text(
-              'Secured by the national traffic authority',
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 11,
-                color: AppTheme.textSecondary.withValues(alpha: 0.78),
-                fontWeight: FontWeight.w600,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.badge_outlined,
+                size: 14,
+                color: _goldPrimary.withValues(alpha: 0.82),
               ),
-            ),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  'Digital driving licence access',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.textSecondary.withValues(alpha: 0.82),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'National Traffic Authority - Powered by eSignet',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppTheme.textSecondary.withValues(alpha: 0.42),
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 
@@ -416,6 +445,149 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
+class _LicenceMark extends StatelessWidget {
+  const _LicenceMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Transform.rotate(
+          angle: -0.08,
+          child: Container(
+            width: 82,
+            height: 58,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFF8FBFF), Color(0xFFE7EDF6)],
+              ),
+              border: Border.all(
+                color: AppTheme.gold.withValues(alpha: 0.72),
+                width: 1.1,
+              ),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color.fromRGBO(0, 0, 0, 0.18),
+                  blurRadius: 16,
+                  offset: Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 18,
+                        height: 18,
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryDeepBlue.withValues(
+                            alpha: 0.9,
+                          ),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Icon(
+                          Icons.person_rounded,
+                          color: Colors.white,
+                          size: 13,
+                        ),
+                      ),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _LicenceLine(widthFactor: 1),
+                            const SizedBox(height: 4),
+                            _LicenceLine(widthFactor: 0.62),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.directions_car_filled_rounded,
+                        color: AppTheme.primaryDeepBlue,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Container(
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: AppTheme.gold.withValues(alpha: 0.78),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          right: 8,
+          bottom: 10,
+          child: Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppTheme.secondaryTeal,
+              border: Border.all(color: const Color(0xFFF8FBFF), width: 3),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color.fromRGBO(0, 0, 0, 0.2),
+                  blurRadius: 10,
+                  offset: Offset(0, 5),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.verified_rounded,
+              color: Colors.white,
+              size: 19,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LicenceLine extends StatelessWidget {
+  const _LicenceLine({required this.widthFactor});
+
+  final double widthFactor;
+
+  @override
+  Widget build(BuildContext context) {
+    return FractionallySizedBox(
+      widthFactor: widthFactor,
+      alignment: Alignment.centerLeft,
+      child: Container(
+        height: 4,
+        decoration: BoxDecoration(
+          color: AppTheme.primaryDeepBlue.withValues(alpha: 0.22),
+          borderRadius: BorderRadius.circular(999),
+        ),
+      ),
+    );
+  }
+}
+
 class _BackgroundAccents extends StatelessWidget {
   const _BackgroundAccents();
 
@@ -428,7 +600,7 @@ class _BackgroundAccents extends StatelessWidget {
           top: -86,
           child: _GlowCircle(
             size: 260,
-            color: AppTheme.gold.withValues(alpha: 0.17),
+            color: AppTheme.gold.withValues(alpha: 0.11),
           ),
         ),
         Positioned(
@@ -436,7 +608,7 @@ class _BackgroundAccents extends StatelessWidget {
           bottom: -106,
           child: _GlowCircle(
             size: 300,
-            color: AppTheme.secondaryTeal.withValues(alpha: 0.14),
+            color: AppTheme.secondaryTeal.withValues(alpha: 0.09),
           ),
         ),
         Positioned(
