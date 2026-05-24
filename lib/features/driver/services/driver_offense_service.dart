@@ -82,6 +82,7 @@ class DriverOffenseService {
   }
 
   Future<DriverOffensesResult> fetchOffenses() async {
+    final hasBackendSession = await AuthService.appToken != null;
     final backend = await AuthService.fetchDriverOffensesFromBackend();
     if (backend != null) {
       final offenses = (backend['offenses'] as List<dynamic>? ?? [])
@@ -95,6 +96,10 @@ class DriverOffenseService {
         totals: DriverOffenseTotals.fromJson(totalsMap),
         licenseNumber: backend['license_number']?.toString(),
       );
+    }
+
+    if (hasBackendSession) {
+      throw Exception('Could not load fines from the server. Check that the backend is running, then try again.');
     }
 
     return _fetchOffensesFromSupabase();
