@@ -35,28 +35,48 @@ class OffenseService {
   Future<Map<String, dynamic>> _insertPayloadWithCompatibility(
     Map<String, dynamic> payload,
   ) async {
-    // Build clean payload with ONLY the columns that likely exist in offenses table
-    final registration_number = payload['license_number'] ?? payload['registration_number'] ?? payload['register_number'];
+    // Build clean payload with the new schema columns
+    final registration_number = payload['registration_number'] ?? payload['license_number'] ?? payload['register_number'];
     
     if (registration_number == null || registration_number.toString().isEmpty) {
       throw Exception('Registration/license number is required');
     }
 
+    // Normalize status to match DB check constraint values
+    const allowedStatuses = ['Pending', 'Paid', 'Resolved', 'Cleared'];
+    final incomingStatus = (payload['status'] ?? 'Pending').toString().trim();
+    String normalizedStatus = 'Pending';
+    for (final s in allowedStatuses) {
+      if (incomingStatus.toLowerCase().contains(s.toLowerCase())) {
+        normalizedStatus = s;
+        break;
+      }
+    }
+
     final cleanPayload = {
       'name': payload['name'] ?? 'Unknown',
       'registration_number': registration_number.toString().trim(),
+      'license_number': registration_number.toString().trim(),
       'offense_type': payload['offense_type'],
       'location': payload['location'],
-      'status': payload['status'] ?? 'Pending',
-      'fine': payload['fine'] ?? 'TBD',
+      'status': normalizedStatus,
+      'fine': (payload['fine'] ?? '0').toString(),
       'created_at': payload['created_at'] ?? DateTime.now().toUtc().toIso8601String(),
     };
 
-    // Try with offense_type_id if provided
+    // Add optional fields if provided
     if (payload.containsKey('offense_type_id') && 
         payload['offense_type_id'] != null && 
-        (payload['offense_type_id'] as String).length > 10) {
+        (payload['offense_type_id'] as String).isNotEmpty) {
       cleanPayload['offense_type_id'] = payload['offense_type_id'];
+    }
+
+    if (payload.containsKey('recorded_by') && payload['recorded_by'] != null) {
+      cleanPayload['recorded_by'] = payload['recorded_by'];
+    }
+
+    if (payload.containsKey('license_class') && payload['license_class'] != null) {
+      cleanPayload['license_class'] = payload['license_class'];
     }
 
     try {
@@ -68,22 +88,29 @@ class OffenseService {
           .timeout(_requestTimeout);
       return Map<String, dynamic>.from(response);
     } catch (error) {
-      // If insert failed, try without optional fields
-      if (error is PostgrestException && (error.code == '42703' || error.code == 'PGRST204')) {
-        cleanPayload.remove('offense_type_id');
+      final msg = error.toString().toLowerCase();
+      // If the remote DB doesn't have `license_number`, retry without it
+      if (msg.contains('license_number') && (msg.contains('column') || msg.contains('could not find') || msg.contains('pgrst204') || msg.contains('does not exist'))) {
+        log('license_number column missing on remote DB — retrying without license_number');
+        final fallback = Map<String, dynamic>.from(cleanPayload);
+        fallback.remove('license_number');
         try {
-          final response = await _client
+          final retryRes = await _client
               .from('offenses')
-              .insert(cleanPayload)
+              .insert(fallback)
               .select()
               .single()
               .timeout(_requestTimeout);
-          return Map<String, dynamic>.from(response);
-        } catch (retryError) {
-          throw Exception('Failed to insert offense: $retryError');
+          return Map<String, dynamic>.from(retryRes);
+        } catch (e2) {
+          log('Retry insert failed: $e2');
+          throw Exception('Failed to insert offense after retry: $e2');
         }
       }
-      rethrow;
+
+      // Log the error and rethrow with more context
+      log('Error inserting offense: $error');
+      throw Exception('Failed to insert offense: $error');
     }
   }
 
@@ -205,6 +232,8 @@ class OffenseService {
     required String offenseType,
     required String location,
     required String fine,
+    String? recordedBy,
+    String? licenseClass,
   }) async {
     try {
       final license = await _dashboardService.getLicenseDetails(licenseNumber);
@@ -214,13 +243,15 @@ class OffenseService {
 
       final payload = {
         'name': name,
-        'license_number': licenseNumber,
-        if (offenseTypeId.length > 10) 'offense_type_id': offenseTypeId,
+        'registration_number': licenseNumber,
+        if (offenseTypeId.isNotEmpty) 'offense_type_id': offenseTypeId,
         'offense_type': offenseType,
         'location': location,
         'status': 'Pending',
         'fine': fine,
         'created_at': DateTime.now().toUtc().toIso8601String(),
+        if (recordedBy != null && recordedBy.isNotEmpty) 'recorded_by': recordedBy,
+        if (licenseClass != null && licenseClass.isNotEmpty) 'license_class': licenseClass,
       };
 
       if (!await SyncService().isOnline()) {
@@ -241,6 +272,8 @@ class OffenseService {
     required String offenseType,
     required String location,
     required String fine,
+    String? recordedBy,
+    String? licenseClass,
   }) async {
     try {
       if (licenseNumber.isEmpty) {
@@ -254,12 +287,14 @@ class OffenseService {
 
       final payload = {
         'name': licenseOwnerName,
-        'license_number': licenseNumber,
+        'registration_number': licenseNumber,
         'offense_type': offenseType,
         'location': location,
         'status': 'Pending',
         'fine': fine,
         'created_at': DateTime.now().toUtc().toIso8601String(),
+        if (recordedBy != null && recordedBy.isNotEmpty) 'recorded_by': recordedBy,
+        if (licenseClass != null && licenseClass.isNotEmpty) 'license_class': licenseClass,
       };
 
       if (!await SyncService().isOnline()) {

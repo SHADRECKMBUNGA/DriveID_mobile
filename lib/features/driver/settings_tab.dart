@@ -113,11 +113,6 @@ class _SettingsTabState extends State<SettingsTab> {
           title: 'View Profile',
           onTap: () => _navigateTo('/profile'),
         ),
-        _buildMenuItem(
-          icon: Icons.lock_outline,
-          title: 'Change Password',
-          onTap: () => _navigateTo('/change-password'),
-        ),
         const Divider(color: Colors.white24, height: 32),
 
         _buildSectionHeader('Preferences'),
