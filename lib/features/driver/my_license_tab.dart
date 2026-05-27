@@ -306,7 +306,7 @@ class _MyLicenseTabState extends State<MyLicenseTab> {
                       ClipRRect(
                         borderRadius: BorderRadius.circular(12),
                         child: license.photoUrl != null && license.photoUrl!.isNotEmpty
-                            ? Image.network(license.photoUrl!, width: 60, height: 60, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _defaultAvatar())
+                            ? Image.network(license.photoUrl!, width: 80, height: 80, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _defaultAvatar())
                             : _defaultAvatar(),
                       ),
                       const SizedBox(width: 16),
