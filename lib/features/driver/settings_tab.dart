@@ -113,6 +113,7 @@ class _SettingsTabState extends State<SettingsTab> {
           title: 'View Profile',
           onTap: () => _navigateTo('/profile'),
         ),
+      
         const Divider(color: Colors.white24, height: 32),
 
         _buildSectionHeader('Preferences'),
