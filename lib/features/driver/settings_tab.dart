@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/app_theme.dart';
 import '../traffic_officer/screens/login_screen.dart';
 import 'profile_screen.dart';
-import 'change_password_screen.dart';
 
 class SettingsTab extends StatefulWidget {
   const SettingsTab({super.key});

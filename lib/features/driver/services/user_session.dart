@@ -4,10 +4,9 @@ class UserSession {
   factory UserSession() => _instance;
   UserSession._internal();
 
-  String? userId;          // stores driver ID
+  String? userId;         
   String? registerNumber;
 
-  // Add this getter for clarity
   String? get driverId => userId;
 
   void setUser(String id, {String? reg}) {
