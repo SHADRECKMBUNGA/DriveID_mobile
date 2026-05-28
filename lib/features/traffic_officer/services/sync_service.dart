@@ -62,8 +62,7 @@ class SyncService {
       await LocalDatabaseService.cacheOffenseTypes(offenseTypesResponse);
 
       // 3. Cache dashboard stats snapshot
-      final stats = await _dashboardService.getDashboardStats();
-      await LocalDatabaseService.cacheDashboardStats(stats.toJson());
+      await _dashboardService.getDashboardStats();
 
       log('Successfully cached data for offline use.');
     } catch (e) {

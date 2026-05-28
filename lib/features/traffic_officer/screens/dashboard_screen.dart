@@ -7,6 +7,7 @@ import '../models/dashboard_stats.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../../core/services/local_database_service.dart';
 import '../services/sync_service.dart';
+import '../services/auth_service.dart';
 import 'verify_screen.dart';
 import 'offenses_screen.dart';
 
@@ -39,6 +40,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return 'MWK $withCommas';
   }
 
+  Future<String?> _currentOfficerIdentifier() async {
+    final currentUser = await AuthService.currentUser;
+    if (currentUser == null) return null;
+
+    final displayName = currentUser.displayName.trim();
+    if (displayName.isNotEmpty && displayName != 'N/A') {
+      return displayName;
+    }
+
+    if (currentUser.email.isNotEmpty) return currentUser.email;
+    return currentUser.id;
+  }
+
+  List<Map<String, dynamic>> _filterRowsForOfficer(
+    List<Map<String, dynamic>> rows,
+    String? recordedBy,
+  ) {
+    if (recordedBy == null || recordedBy.isEmpty) return [];
+    return rows
+        .where((row) => row['recorded_by']?.toString().trim() == recordedBy)
+        .toList();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -49,31 +73,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       final isOnline = await SyncService().isOnline();
       if (!isOnline) {
-        final cachedStats = _dashboardService.getCachedDashboardStats();
-        final localPendingFines = LocalDatabaseService.getPendingOffenses()
+        final recordedBy = await _currentOfficerIdentifier();
+        final cachedStats = await _dashboardService.getCachedDashboardStats();
+        final pendingOffenses = _filterRowsForOfficer(
+          LocalDatabaseService.getPendingOffenses(),
+          recordedBy,
+        );
+        final pendingVerifications = _filterRowsForOfficer(
+          LocalDatabaseService.getPendingVerifications(),
+          recordedBy,
+        );
+        final localPendingFines = pendingOffenses
             .fold<num>(0, (sum, row) => sum + _parseFine(row['fine']));
         if (!mounted) return;
         setState(() {
           if (cachedStats != null) {
             _stats = DashboardStats(
               verificationsToday:
-                  cachedStats.verificationsToday +
-                  LocalDatabaseService.getPendingVerifications().length,
+                  cachedStats.verificationsToday + pendingVerifications.length,
               offensesRecorded: cachedStats.offensesRecorded,
               totalVerifications: cachedStats.totalVerifications,
               pendingOffenses:
-                  cachedStats.pendingOffenses +
-                  LocalDatabaseService.getPendingOffenses().length,
+                  cachedStats.pendingOffenses + pendingOffenses.length,
               pendingFinesTotal: cachedStats.pendingFinesTotal + localPendingFines,
             );
           } else {
             _stats = DashboardStats(
-              verificationsToday:
-                  LocalDatabaseService.getPendingVerifications().length,
-              offensesRecorded:
-                  LocalDatabaseService.getPendingOffenses().length,
+              verificationsToday: pendingVerifications.length,
+              offensesRecorded: pendingOffenses.length,
               totalVerifications: 0,
-              pendingOffenses: LocalDatabaseService.getPendingOffenses().length,
+              pendingOffenses: pendingOffenses.length,
               pendingFinesTotal: localPendingFines,
             );
           }

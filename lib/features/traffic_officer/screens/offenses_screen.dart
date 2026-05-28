@@ -444,6 +444,9 @@ class _OffensesScreenState extends State<OffensesScreen> {
                   const SizedBox(height: 12),
                   if (isRecording)
                     Container(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.46,
+                      ),
                       decoration: BoxDecoration(
                         color: AppTheme.cardDark,
                         borderRadius: BorderRadius.circular(20),
@@ -451,9 +454,10 @@ class _OffensesScreenState extends State<OffensesScreen> {
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                             SizedBox(
                               width: double.infinity,
                               child: OutlinedButton.icon(
@@ -666,7 +670,8 @@ class _OffensesScreenState extends State<OffensesScreen> {
                                         ),
                               ),
                             ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),

@@ -1,5 +1,9 @@
+import 'dart:developer' show log;
+
 import 'package:flutter/material.dart';
+
 import '../../../core/theme/app_theme.dart';
+import '../../../core/services/location_service.dart';
 
 class OffenseFormData {
   final String offenseType;
@@ -40,13 +44,18 @@ class OffenseForm extends StatefulWidget {
 class _OffenseFormState extends State<OffenseForm> {
   late TextEditingController _offenseTypeController;
   late TextEditingController _locationController;
+  final LocationService _locationService = const LocationService();
   bool _isSubmitting = false;
+  bool _isLocating = false;
 
   @override
   void initState() {
     super.initState();
     _offenseTypeController = TextEditingController();
     _locationController = TextEditingController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _autoFillLocationIfEmpty();
+    });
   }
 
   @override
@@ -56,6 +65,23 @@ class _OffenseFormState extends State<OffenseForm> {
     super.dispose();
   }
 
+  Future<void> _autoFillLocationIfEmpty() async {
+    if (_isLocating || _locationController.text.trim().isNotEmpty) return;
+    setState(() => _isLocating = true);
+    try {
+      final text = await _locationService.getCurrentAddressString();
+      if (!mounted) return;
+      if (text != null && text.trim().isNotEmpty) {
+        _locationController.text = text.trim();
+      }
+    } catch (e, stack) {
+      log('OffenseForm: Auto-fill location error: $e');
+      log('Stack trace: $stack');
+    } finally {
+      if (mounted) setState(() => _isLocating = false);
+    }
+  }
+
   void _handleSubmit() {
     if (_offenseTypeController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -63,15 +89,21 @@ class _OffenseFormState extends State<OffenseForm> {
       );
       return;
     }
+    if (_locationController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a location')),
+      );
+      return;
+    }
 
     setState(() => _isSubmitting = true);
 
     final fine = widget.offenseFines[_offenseTypeController.text] ?? 'TBD';
-    
+
     final formData = OffenseFormData(
       offenseType: _offenseTypeController.text,
       fine: fine,
-      location: _locationController.text,
+      location: _locationController.text.trim(),
     );
 
     widget.onSubmit(formData);
@@ -270,6 +302,24 @@ class _OffenseFormState extends State<OffenseForm> {
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 12,
+                  ),
+                  suffixIcon: IconButton(
+                    tooltip: 'Use current location',
+                    onPressed:
+                        (_isSubmitting || _isLocating)
+                            ? null
+                            : () async {
+                              _locationController.clear();
+                              await _autoFillLocationIfEmpty();
+                            },
+                    icon:
+                        _isLocating
+                            ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                            : const Icon(Icons.my_location_rounded),
                   ),
                 ),
                 style: const TextStyle(color: Colors.white),

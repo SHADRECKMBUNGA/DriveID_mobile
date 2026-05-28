@@ -115,12 +115,17 @@ class LocalDatabaseService {
   // --- Dashboard Stats Cache ---
   static Box get _dashboardStats => Hive.box(dashboardStatsBox);
 
-  static Future<void> cacheDashboardStats(Map<String, dynamic> stats) async {
-    await _dashboardStats.put('latest', jsonEncode(stats));
+  static Future<void> cacheDashboardStats(
+    Map<String, dynamic> stats, {
+    String cacheKey = 'latest',
+  }) async {
+    await _dashboardStats.put(cacheKey, jsonEncode(stats));
   }
 
-  static Map<String, dynamic>? getCachedDashboardStats() {
-    final value = _dashboardStats.get('latest');
+  static Map<String, dynamic>? getCachedDashboardStats({
+    String cacheKey = 'latest',
+  }) {
+    final value = _dashboardStats.get(cacheKey);
     if (value == null) return null;
     return jsonDecode(value.toString()) as Map<String, dynamic>;
   }

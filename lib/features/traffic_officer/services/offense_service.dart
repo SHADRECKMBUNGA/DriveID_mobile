@@ -3,6 +3,7 @@ import 'dart:developer' show log;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/config/supabase_config.dart';
+import '../../../core/models/app_user.dart';
 import '../models/license.dart';
 import '../models/offense.dart';
 import 'dashboard_service.dart';
@@ -31,6 +32,23 @@ class OffenseService {
       return 'registration_number';
     if (payload.containsKey('license_number')) return 'license_number';
     return 'register_number';
+  }
+
+  /// Extracts the officer's identifier (full_name or email) for recording purposes
+  String? _getOfficerIdentifier(AppUser? currentUser) {
+    if (currentUser == null) return null;
+
+    final displayName = currentUser.displayName.trim();
+    if (displayName.isNotEmpty && displayName != 'N/A') {
+      return displayName;
+    }
+
+    if (currentUser.email.isNotEmpty) {
+      return currentUser.email;
+    }
+
+    // Fall back to id if nothing else is available
+    return currentUser.id;
   }
 
   /// Extracts numeric value from fine strings like "MWK 25,000" or "25000"
@@ -80,6 +98,11 @@ class OffenseService {
           payload['created_at'] ?? DateTime.now().toUtc().toIso8601String(),
     };
 
+    final recordedBy = payload['recorded_by']?.toString().trim();
+    if (recordedBy != null && recordedBy.isNotEmpty) {
+      cleanPayload['recorded_by'] = recordedBy;
+    }
+
     // Try with offense_type_id if provided
     if (payload.containsKey('offense_type_id') &&
         payload['offense_type_id'] != null &&
@@ -124,7 +147,10 @@ class OffenseService {
             .select()
             .eq(column, identifier)
             .order('created_at', ascending: false)
-            .timeout(_requestTimeout, onTimeout: () => []);
+            .timeout(
+              _requestTimeout,
+              onTimeout: () => <Map<String, dynamic>>[],
+            );
 
         final offenses = (response as List<dynamic>?) ?? [];
         return offenses
@@ -165,15 +191,40 @@ class OffenseService {
   Future<List<Offense>> getOffenses({int? limit, int? offset}) async {
     try {
       if (!await SyncService().isOnline()) {
+        final currentUser = await AuthService.currentUser;
+        final recordedBy = _getOfficerIdentifier(currentUser);
         final pending = LocalDatabaseService.getPendingOffenses();
-        return pending
+        final filtered =
+            recordedBy == null || recordedBy.isEmpty
+                ? <Map<String, dynamic>>[]
+                : pending
+                    .where(
+                      (json) =>
+                          json['recorded_by']?.toString().trim() ==
+                          recordedBy,
+                    )
+                    .toList();
+        final safeOffset = offset ?? 0;
+        final paged =
+            limit == null
+                ? filtered
+                : filtered.skip(safeOffset).take(limit).toList();
+        return paged
             .map((json) => Offense.fromJson(Map<String, dynamic>.from(json)))
             .toList();
+      }
+
+      // Get current officer's identifier for filtering
+      final currentUser = await AuthService.currentUser;
+      final recordedBy = _getOfficerIdentifier(currentUser);
+      if (recordedBy == null || recordedBy.isEmpty) {
+        return [];
       }
 
       var query = _client
           .from('offenses')
           .select()
+          .eq('recorded_by', recordedBy)
           .order('created_at', ascending: false);
 
       if (limit != null) {
@@ -181,11 +232,23 @@ class OffenseService {
         query = query.range(safeOffset, safeOffset + limit - 1);
       }
 
-      final response = await query.timeout(_requestTimeout, onTimeout: () => []);
-      final offenses = (response as List<dynamic>?) ?? [];
-      return offenses
-          .map((json) => Offense.fromJson(json as Map<String, dynamic>))
-          .toList();
+      try {
+        final response = await query.timeout(
+          _requestTimeout,
+          onTimeout: () => <Map<String, dynamic>>[],
+        );
+        final offenses = (response as List<dynamic>?) ?? [];
+        return offenses
+            .map((json) => Offense.fromJson(json as Map<String, dynamic>))
+            .toList();
+      } catch (error) {
+        // If recorded_by is unavailable, keep officer scoping strict.
+        if (_isMissingColumnError(error, 'recorded_by') && recordedBy != null) {
+          log('Warning: recorded_by column not found, returning no offenses');
+          return [];
+        }
+        rethrow;
+      }
     } catch (e) {
       throw Exception('Failed to fetch offenses: $e');
     }
@@ -221,7 +284,10 @@ class OffenseService {
           .from('offense_types')
           .select()
           .order('label')
-          .timeout(_requestTimeout, onTimeout: () => []);
+          .timeout(
+            _requestTimeout,
+            onTimeout: () => <Map<String, dynamic>>[],
+          );
 
       return (response as List<dynamic>?)
               ?.map((e) => Map<String, dynamic>.from(e))
@@ -259,10 +325,8 @@ class OffenseService {
       }
 
       final currentUser = await AuthService.currentUser;
-      final recordedBy =
-          currentUser?.email.isNotEmpty == true
-              ? currentUser!.email
-              : currentUser?.id;
+      // Use full_name if available, otherwise fall back to email or id
+      final recordedBy = _getOfficerIdentifier(currentUser);
 
       final payload = {
         'name': name,
@@ -311,10 +375,7 @@ class OffenseService {
       }
 
       final currentUser = await AuthService.currentUser;
-      final recordedBy =
-          currentUser?.email.isNotEmpty == true
-              ? currentUser!.email
-              : currentUser?.id;
+      final recordedBy = _getOfficerIdentifier(currentUser);
 
       final payload = {
         'name': licenseOwnerName,

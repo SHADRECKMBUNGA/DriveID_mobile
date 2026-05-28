@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:developer';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/license.dart';
 import '../../../core/config/supabase_config.dart';
+import '../../../core/models/app_user.dart';
 import '../models/dashboard_stats.dart';
 import 'sync_service.dart';
 import 'auth_service.dart';
@@ -17,16 +19,33 @@ class DashboardService {
     'registration_number',
   ];
   static const List<String> _verificationIdentifierColumns = [
+    'license_number',
     'registration_number',
   ];
 
   bool _isMissingColumnError(Object error, String expectedColumn) {
     if (error is PostgrestException) {
-      return (error.code == '42703' ||
-          error.code == 'PGRST204' ||
-          error.message.contains('Could not find the'));
+      final message = error.message.toLowerCase();
+      final column = expectedColumn.toLowerCase();
+      return (error.code == '42703' || error.code == 'PGRST204') &&
+          message.contains(column);
     }
     return false;
+  }
+
+  String? _getOfficerIdentifier(AppUser? currentUser) {
+    if (currentUser == null) return null;
+
+    final displayName = currentUser.displayName.trim();
+    if (displayName.isNotEmpty && displayName != 'N/A') {
+      return displayName;
+    }
+
+    if (currentUser.email.isNotEmpty) {
+      return currentUser.email;
+    }
+
+    return currentUser.id;
   }
 
   Future<Map<String, Map<String, String>>> _getDriverInfoById(
@@ -58,7 +77,10 @@ class DashboardService {
             .from('drivers')
             .select(select)
             .inFilter('id', ids)
-            .timeout(_requestTimeout, onTimeout: () => []);
+            .timeout(
+              _requestTimeout,
+              onTimeout: () => <Map<String, dynamic>>[],
+            );
 
         final rows = (response as List<dynamic>?) ?? [];
         final result = <String, Map<String, String>>{};
@@ -73,10 +95,7 @@ class DashboardService {
                       row['photo_url'])
                   ?.toString() ??
               '';
-          result[id] = {
-            'full_name': fullName,
-            'photo_url': photoUrl,
-          };
+          result[id] = {'full_name': fullName, 'photo_url': photoUrl};
         }
         return result;
       } catch (e) {
@@ -87,7 +106,8 @@ class DashboardService {
                 _isMissingColumnError(e, 'profile_picture_url') ||
             select.contains('avatar_url') &&
                 _isMissingColumnError(e, 'avatar_url') ||
-            select.contains('photo_url') && _isMissingColumnError(e, 'photo_url')) {
+            select.contains('photo_url') &&
+                _isMissingColumnError(e, 'photo_url')) {
           continue;
         }
         // If RLS blocks `drivers`, we still want licenses to load.
@@ -105,7 +125,8 @@ class DashboardService {
     final driverId = row['driver_id']?.toString() ?? '';
     // Preserve any pre-enriched owner name when driver lookup isn't available.
     final existingOwner = (enrichedRow['owner_name'] ?? '').toString().trim();
-    final resolvedOwner = (driverInfo[driverId]?['full_name'] ?? '').toString().trim();
+    final resolvedOwner =
+        (driverInfo[driverId]?['full_name'] ?? '').toString().trim();
     if (resolvedOwner.isNotEmpty) {
       enrichedRow['owner_name'] = resolvedOwner;
     } else if (existingOwner.isEmpty) {
@@ -113,14 +134,16 @@ class DashboardService {
     }
 
     // If backend/row already includes photo info, keep it; otherwise enrich from drivers table.
-    final existingPhoto = (enrichedRow['profile_picture_url'] ??
-            enrichedRow['photo_url'] ??
-            enrichedRow['driver_photo_url'])
-        ?.toString()
-        .trim();
-    final photoUrl = (existingPhoto?.isNotEmpty == true)
-        ? existingPhoto
-        : driverInfo[driverId]?['photo_url']?.toString().trim();
+    final existingPhoto =
+        (enrichedRow['profile_picture_url'] ??
+                enrichedRow['photo_url'] ??
+                enrichedRow['driver_photo_url'])
+            ?.toString()
+            .trim();
+    final photoUrl =
+        (existingPhoto?.isNotEmpty == true)
+            ? existingPhoto
+            : driverInfo[driverId]?['photo_url']?.toString().trim();
     if (photoUrl != null && photoUrl.isNotEmpty) {
       // `License.fromJson` understands `profile_picture_url` / `photo_url`
       enrichedRow['profile_picture_url'] = photoUrl;
@@ -176,43 +199,65 @@ class DashboardService {
 
       const pendingStatuses = ['pending', 'Pending'];
 
-      final futureVerificationsResponse = _client
+      final currentUser = await AuthService.currentUser;
+      final recordedBy = _getOfficerIdentifier(currentUser);
+      if (recordedBy == null || recordedBy.isEmpty) {
+        return DashboardStats(
+          verificationsToday: 0,
+          offensesRecorded: 0,
+          totalVerifications: 0,
+          pendingOffenses: 0,
+          pendingFinesTotal: 0,
+        );
+      }
+
+      // Build queries with officer filtering
+      var verificationsQuery = _client
           .from('verifications')
           .select()
           .gte('verified_at', startOfDay.toUtc().toIso8601String())
-          .lt('verified_at', endOfDay.toUtc().toIso8601String())
-          .timeout(_requestTimeout, onTimeout: () => []);
+          .lt('verified_at', endOfDay.toUtc().toIso8601String());
 
-      final futureTotalVerificationsResponse = _client
-          .from('verifications')
-          .select()
-          .timeout(_requestTimeout, onTimeout: () => []);
+      verificationsQuery = verificationsQuery.eq('recorded_by', recordedBy);
 
-      final futureOffensesResponse = _client
+      var totalVerificationsQuery = _client.from('verifications').select();
+      totalVerificationsQuery = totalVerificationsQuery.eq(
+        'recorded_by',
+        recordedBy,
+      );
+
+      var offensesTodayQuery = _client
           .from('offenses')
           .select()
           .gte('created_at', startOfDay.toUtc().toIso8601String())
-          .lt('created_at', endOfDay.toUtc().toIso8601String())
-          .timeout(_requestTimeout, onTimeout: () => []);
+          .lt('created_at', endOfDay.toUtc().toIso8601String());
 
-      final futurePendingOffensesResponse = _client
+      offensesTodayQuery = offensesTodayQuery.eq('recorded_by', recordedBy);
+
+      var pendingOffensesQuery = _client
           .from('offenses')
           .select()
-          .inFilter('status', pendingStatuses)
-          .timeout(_requestTimeout, onTimeout: () => []);
+          .inFilter('status', pendingStatuses);
 
-      final futurePendingFinesResponse = _client
+      pendingOffensesQuery = pendingOffensesQuery.eq(
+        'recorded_by',
+        recordedBy,
+      );
+
+      var pendingFinesQuery = _client
           .from('offenses')
           .select('fine')
-          .inFilter('status', pendingStatuses)
-          .timeout(_requestTimeout, onTimeout: () => []);
+          .inFilter('status', pendingStatuses);
 
+      pendingFinesQuery = pendingFinesQuery.eq('recorded_by', recordedBy);
+
+      // Execute queries with timeout and error handling
       final responses = await Future.wait([
-        futureVerificationsResponse,
-        futureTotalVerificationsResponse,
-        futureOffensesResponse,
-        futurePendingOffensesResponse,
-        futurePendingFinesResponse,
+        _executeQueryWithFallback(verificationsQuery, 'recorded_by'),
+        _executeQueryWithFallback(totalVerificationsQuery, 'recorded_by'),
+        _executeQueryWithFallback(offensesTodayQuery, 'recorded_by'),
+        _executeQueryWithFallback(pendingOffensesQuery, 'recorded_by'),
+        _executeQueryWithFallback(pendingFinesQuery, 'recorded_by'),
       ]);
 
       final verificationsList = (responses[0] as List<dynamic>?) ?? [];
@@ -242,15 +287,46 @@ class DashboardService {
         pendingOffenses: pendingOffensesList.length,
         pendingFinesTotal: pendingFinesTotal,
       );
-      await LocalDatabaseService.cacheDashboardStats(stats.toJson());
+      await LocalDatabaseService.cacheDashboardStats(
+        stats.toJson(),
+        cacheKey: recordedBy,
+      );
       return stats;
     } catch (e) {
+      log('Error fetching dashboard stats: $e');
       throw Exception('Failed to fetch dashboard stats: $e');
     }
   }
 
-  DashboardStats? getCachedDashboardStats() {
-    final cached = LocalDatabaseService.getCachedDashboardStats();
+  /// Execute a query while preserving officer scoping if recorded_by is missing.
+  Future<List<dynamic>> _executeQueryWithFallback(
+    dynamic query,
+    String columnToCheck,
+  ) async {
+    try {
+      final response = await query.timeout(_requestTimeout);
+      return (response as List<dynamic>?) ?? [];
+    } on TimeoutException {
+      return [];
+    } catch (error) {
+      if (_isMissingColumnError(error, columnToCheck)) {
+        log(
+          'Warning: $columnToCheck column not found, returning no dashboard rows',
+        );
+        return [];
+      }
+      rethrow;
+    }
+  }
+
+  Future<DashboardStats?> getCachedDashboardStats() async {
+    final currentUser = await AuthService.currentUser;
+    final recordedBy = _getOfficerIdentifier(currentUser);
+    if (recordedBy == null || recordedBy.isEmpty) return null;
+
+    final cached = LocalDatabaseService.getCachedDashboardStats(
+      cacheKey: recordedBy,
+    );
     if (cached == null) return null;
     return DashboardStats.fromJson(cached);
   }
@@ -258,7 +334,15 @@ class DashboardService {
   Future<void> recordVerification(String licenseNumber) async {
     final nowUtc = DateTime.now().toUtc().toIso8601String();
 
-    final payload = {'license_number': licenseNumber, 'verified_at': nowUtc};
+    final currentUser = await AuthService.currentUser;
+    final recordedBy = _getOfficerIdentifier(currentUser);
+
+    final payload = {
+      'license_number': licenseNumber,
+      'verified_at': nowUtc,
+      if (recordedBy != null && recordedBy.isNotEmpty)
+        'recorded_by': recordedBy,
+    };
 
     if (!await SyncService().isOnline()) {
       await LocalDatabaseService.savePendingVerification(payload);
@@ -277,15 +361,49 @@ class DashboardService {
         basePayload['register_number'];
     if (licenseNumber == null || licenseNumber.toString().isEmpty) return;
 
-    // Build clean payload with ONLY the columns that exist in verifications table
+    final verifiedAt =
+        basePayload['verified_at'] ?? DateTime.now().toUtc().toIso8601String();
+    final recordedBy = basePayload['recorded_by']?.toString().trim();
+    final normalizedLicenseNumber = licenseNumber.toString().trim();
+
     final payload = {
-      'registration_number': licenseNumber.toString().trim(),
-      'verified_at':
-          basePayload['verified_at'] ??
-          DateTime.now().toUtc().toIso8601String(),
+      'license_number': normalizedLicenseNumber,
+      'registration_number': normalizedLicenseNumber,
+      'verified_at': verifiedAt,
+      if (recordedBy != null && recordedBy.isNotEmpty)
+        'recorded_by': recordedBy,
     };
 
-    await _client.from('verifications').insert(payload);
+    final activePayload = Map<String, dynamic>.from(payload);
+
+    for (var attempt = 0; attempt < 4; attempt++) {
+      try {
+        await _client.from('verifications').insert(activePayload).select('id');
+        return;
+      } catch (error) {
+        if (_isMissingColumnError(error, 'recorded_by') &&
+            activePayload.containsKey('recorded_by')) {
+          activePayload.remove('recorded_by');
+          continue;
+        }
+
+        if (_isMissingColumnError(error, 'license_number') &&
+            activePayload.containsKey('license_number')) {
+          activePayload.remove('license_number');
+          continue;
+        }
+
+        if (_isMissingColumnError(error, 'registration_number') &&
+            activePayload.containsKey('registration_number')) {
+          activePayload.remove('registration_number');
+          continue;
+        }
+
+        rethrow;
+      }
+    }
+
+    throw Exception('No compatible verification column set found');
   }
 
   Future<Map<String, dynamic>?> getLatestVerificationForLicense({
@@ -382,7 +500,10 @@ class DashboardService {
       final response = await _client
           .from('licenses')
           .select()
-          .timeout(_requestTimeout, onTimeout: () => []);
+          .timeout(
+            _requestTimeout,
+            onTimeout: () => <Map<String, dynamic>>[],
+          );
       final licenses = (response as List<dynamic>?) ?? [];
       log('getAllLicensesRaw: Fetched ${licenses.length} licenses from server');
 
@@ -440,15 +561,7 @@ class DashboardService {
     try {
       final isValid = await isValidLicense(licenseNumber);
 
-      // We still want to record the verification attempt regardless of whether the license is valid or not
-      // This ensures the dashboard stats reflect all activity accurately
-      try {
-        await recordVerification(licenseNumber);
-      } catch (e) {
-        // We log it but don't fail the verification process if recording fails
-        // due to missing license rows (foreign key constraint)
-        log('Could not record verification: $e');
-      }
+      await recordVerification(licenseNumber);
 
       return isValid;
     } catch (e) {
